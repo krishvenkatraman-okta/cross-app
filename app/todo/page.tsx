@@ -1,14 +1,102 @@
-import { Suspense } from "react"
+"use client"
+
+import { Suspense, useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { CheckSquare, Plus, ArrowLeft, Settings } from "lucide-react"
+import { CheckSquare, Plus, ArrowLeft, Settings, LogIn } from "lucide-react"
 import Link from "next/link"
 import { TodoList } from "@/components/todo-list"
 import { AddTodoForm } from "@/components/add-todo-form"
 import { TodoStats } from "@/components/todo-stats"
 import { CrossAppActions } from "@/components/cross-app-actions"
+import { validateOktaConfig } from "@/lib/okta-config"
 
 export default function TodoPage() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [user, setUser] = useState<any>(null)
+
+  useEffect(() => {
+    checkAuthentication()
+  }, [])
+
+  const checkAuthentication = async () => {
+    try {
+      // Check if Okta config is valid
+      if (!validateOktaConfig("todo")) {
+        setIsLoading(false)
+        return
+      }
+
+      // Check for existing session/token
+      const token = localStorage.getItem("okta-token")
+      const userInfo = localStorage.getItem("okta-user")
+
+      if (token && userInfo) {
+        setUser(JSON.parse(userInfo))
+        setIsAuthenticated(true)
+      }
+    } catch (error) {
+      console.error("Authentication check failed:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSignIn = () => {
+    // In a real implementation, this would redirect to Okta
+    const oktaAuthUrl = `https://iam.oktapreview.com/oauth2/v1/authorize?client_id=${process.env.NEXT_PUBLIC_OKTA_TODO_CLIENT_ID}&response_type=code&scope=openid%20profile%20email&redirect_uri=${window.location.origin}/callback&state=todo`
+    window.location.href = oktaAuthUrl
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Checking authentication...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show sign-in prompt if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CheckSquare className="h-12 w-12 text-green-600 mx-auto mb-4" />
+            <CardTitle className="text-2xl">Todo Application</CardTitle>
+            <p className="text-gray-600 dark:text-gray-400">Please sign in with Okta to access your todos</p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button onClick={handleSignIn} className="w-full" size="lg">
+              <LogIn className="h-4 w-4 mr-2" />
+              Sign in with Okta
+            </Button>
+            <div className="text-center">
+              <Link href="/dashboard">
+                <Button variant="ghost" size="sm">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Dashboard
+                </Button>
+              </Link>
+            </div>
+            {!validateOktaConfig("todo") && (
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                  ⚠️ Please configure your Okta credentials to enable authentication
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Show authenticated todo interface
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 dark:from-gray-900 dark:to-gray-800">
       {/* Header */}
@@ -29,6 +117,9 @@ export default function TodoPage() {
             </div>
 
             <div className="flex items-center space-x-2">
+              {user && (
+                <span className="text-sm text-gray-600 dark:text-gray-400">Welcome, {user.name || user.email}</span>
+              )}
               <CrossAppActions />
               <Button variant="ghost" size="sm">
                 <Settings className="h-4 w-4" />
