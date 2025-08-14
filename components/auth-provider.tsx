@@ -16,7 +16,6 @@ interface AuthContextType {
   signIn: () => Promise<void>
   signOut: () => Promise<void>
   hasPermission: (permission: string) => boolean
-  setUser: (user: User | null) => void
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -31,15 +30,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkAuthStatus = async () => {
     try {
-      // Check for existing session only
-      const token = localStorage.getItem("okta_access_token")
-      if (token) {
-        await validateToken(token)
+      // Check if user is already authenticated (e.g., from callback)
+      const urlParams = new URLSearchParams(window.location.search)
+      const code = urlParams.get("code")
+      const state = urlParams.get("state")
+
+      if (code && state) {
+        // Handle OAuth callback
+        await handleCallback(code, state)
+      } else {
+        // Check for existing session
+        const token = localStorage.getItem("okta_access_token")
+        if (token) {
+          await validateToken(token)
+        }
       }
     } catch (error) {
       console.error("Auth check failed:", error)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleCallback = async (code: string, state: string) => {
+    try {
+      // Exchange code for tokens
+      const response = await fetch("/api/auth/callback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, state }),
+      })
+
+      if (response.ok) {
+        const { user: userData, tokens } = await response.json()
+        setUser(userData)
+        localStorage.setItem("okta_access_token", tokens.access_token)
+
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname)
+      }
+    } catch (error) {
+      console.error("Callback handling failed:", error)
     }
   }
 
@@ -114,7 +145,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signIn,
         signOut,
         hasPermission,
-        setUser,
       }}
     >
       {children}
