@@ -63,9 +63,9 @@ export async function POST(request: NextRequest) {
 
     const audienceUrl = target_app === "inventory" ? "https://auth.inventory.com/" : `https://auth.${target_app}.com/`
 
-    const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
+    const clientId = tokenPayload.aud
     if (!clientId) {
-      return NextResponse.json({ error: "Missing Okta client ID configuration" }, { status: 500 })
+      return NextResponse.json({ error: "Missing client ID from ID token audience" }, { status: 500 })
     }
 
     const clientAssertion = await generateClientAssertion(clientId, dynamicTokenEndpoint)
