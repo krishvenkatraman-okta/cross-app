@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     const protocol = request.headers.get("x-forwarded-proto") || "https"
     const redirectUri = `${protocol}://${host}/callback`
 
-    const tokenEndpoint = `${process.env.NEXT_PUBLIC_OKTA_ISSUER}/oauth2/default/v1/token`
+    const tokenEndpoint = `${process.env.NEXT_PUBLIC_OKTA_ISSUER}/oauth2/v1/token`
     const authHeader = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`
 
     console.log("[v0] Token exchange details:", {
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Get user info
-    const userResponse = await fetch(`${process.env.NEXT_PUBLIC_OKTA_ISSUER}/oauth2/default/v1/userinfo`, {
+    const userResponse = await fetch(`${process.env.NEXT_PUBLIC_OKTA_ISSUER}/oauth2/v1/userinfo`, {
       headers: {
         Authorization: `Bearer ${tokens.access_token}`,
       },
