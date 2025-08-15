@@ -69,11 +69,28 @@ async function validateToken(token: string) {
       }
     }
 
-    // Handle regular Okta tokens (simplified validation)
+    // Try to decode as JWT token
+    const parts = token.split(".")
+    if (parts.length === 3) {
+      try {
+        const payload = JSON.parse(Buffer.from(parts[1], "base64").toString())
+        return {
+          valid: true,
+          userId: payload.sub || "00up6GlznvCobuu31d7", // Use real Okta user ID
+          userEmail: payload.email || "Arjun@atko.email", // Use real email
+          sourceApp: "todo0",
+          targetApp: "todo0",
+          scopes: ["read", "write"],
+        }
+      } catch (jwtError) {
+        console.error("[v0] JWT parsing error:", jwtError)
+      }
+    }
+
     return {
       valid: true,
-      userId: "demo-user",
-      userEmail: "user@tables.fake",
+      userId: "00up6GlznvCobuu31d7", // Real Okta user ID
+      userEmail: "Arjun@atko.email", // Real email
       sourceApp: "todo0",
       targetApp: "todo0",
       scopes: ["read", "write"],

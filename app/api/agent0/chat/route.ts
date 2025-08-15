@@ -22,14 +22,19 @@ export async function POST(request: NextRequest) {
       (message.toLowerCase().includes("what") && message.toLowerCase().includes("my"))
 
     if (isTodoQuery) {
+      console.log("[v0] Todo query detected, attempting cross-app access")
+
       try {
         const crossAppTokens = await getCrossAppToken(request, "todo0")
+        console.log("[v0] Cross-app tokens result:", crossAppTokens ? "SUCCESS" : "FAILED")
 
         if (crossAppTokens) {
           const tokenData = {
             id_jag_token: crossAppTokens.id_jag_token,
             todo_access_token: crossAppTokens.todo_access_token,
           }
+
+          console.log("[v0] Fetching todos with token:", crossAppTokens.todo_access_token?.substring(0, 20) + "...")
 
           // Fetch todo data using cross-app token
           const todoResponse = await fetch(`${request.nextUrl.origin}/api/todo0/todos`, {
@@ -38,16 +43,22 @@ export async function POST(request: NextRequest) {
             },
           })
 
+          console.log("[v0] Todo API response status:", todoResponse.status)
+
           if (todoResponse.ok) {
             todoData = await todoResponse.json()
-            console.log("[v0] Retrieved todo data via cross-app token:", todoData)
+            console.log("[v0] Retrieved todo data:", {
+              todosCount: todoData?.todos?.length || 0,
+              todos: todoData?.todos?.map((t: any) => ({ id: t.id, text: t.text, completed: t.completed })) || [],
+            })
 
             return NextResponse.json({
               message: formatTodoResponse(todoData),
               tokens: tokenData,
             })
           } else {
-            console.error("[v0] Failed to fetch todos with cross-app token:", todoResponse.status)
+            const errorText = await todoResponse.text()
+            console.error("[v0] Failed to fetch todos:", todoResponse.status, errorText)
           }
         } else {
           console.log("[v0] No cross-app token available, using demo data")
@@ -139,10 +150,13 @@ async function getCrossAppToken(
     const cookies = request.headers.get("cookie")
     let userIdToken = null
 
+    console.log("[v0] Checking for user token in cookies...")
+
     if (cookies) {
       const tokenMatch = cookies.match(/okta-token=([^;]+)/)
       if (tokenMatch) {
         userIdToken = decodeURIComponent(tokenMatch[1])
+        console.log("[v0] Found real user token:", userIdToken?.substring(0, 20) + "...")
       }
     }
 
@@ -150,6 +164,8 @@ async function getCrossAppToken(
       console.log("[v0] No real user token found, using demo token")
       userIdToken = createDemoIdToken()
     }
+
+    console.log("[v0] Making cross-app access request...")
 
     const response = await fetch(`${request.nextUrl.origin}/api/agent0/cross-app-access`, {
       method: "POST",
@@ -160,15 +176,19 @@ async function getCrossAppToken(
       body: JSON.stringify({ target_app: targetApp }),
     })
 
+    console.log("[v0] Cross-app access response status:", response.status)
+
     if (response.ok) {
       const data = await response.json()
+      console.log("[v0] Cross-app access response data keys:", Object.keys(data))
       console.log("[v0] Obtained cross-app access tokens for", targetApp)
       return {
         id_jag_token: data.id_jag_token || data.access_token, // Use actual token
         todo_access_token: data.access_token,
       }
     } else {
-      console.error("[v0] Failed to get cross-app token:", response.status)
+      const errorText = await response.text()
+      console.error("[v0] Failed to get cross-app token:", response.status, errorText)
       return null
     }
   } catch (error) {
