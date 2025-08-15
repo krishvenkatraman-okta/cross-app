@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useState } from "react"
+import { Suspense } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { CheckSquare, Plus, ArrowLeft, Settings, LogIn } from "lucide-react"
@@ -10,43 +10,14 @@ import { AddTodoForm } from "@/components/add-todo-form"
 import { TodoStats } from "@/components/todo-stats"
 import { CrossAppActions } from "@/components/cross-app-actions"
 import { validateOktaConfig } from "@/lib/okta-config"
+import { useAuth } from "@/components/auth-provider"
 
 export default function TodoPage() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
-  const [user, setUser] = useState<any>(null)
-
-  useEffect(() => {
-    checkAuthentication()
-  }, [])
-
-  const checkAuthentication = async () => {
-    try {
-      // Check if Okta config is valid
-      if (!validateOktaConfig("todo")) {
-        setIsLoading(false)
-        return
-      }
-
-      // Check for existing session/token
-      const token = localStorage.getItem("okta-token")
-      const userInfo = localStorage.getItem("okta-user")
-
-      if (token && userInfo) {
-        setUser(JSON.parse(userInfo))
-        setIsAuthenticated(true)
-      }
-    } catch (error) {
-      console.error("Authentication check failed:", error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  const { user, isLoading, signIn } = useAuth()
+  const isAuthenticated = !!user
 
   const handleSignIn = () => {
-    // In a real implementation, this would redirect to Okta
-    const oktaAuthUrl = `https://iam.oktapreview.com/oauth2/v1/authorize?client_id=${process.env.NEXT_PUBLIC_OKTA_TODO_CLIENT_ID}&response_type=code&scope=openid%20profile%20email&redirect_uri=${window.location.origin}/callback&state=todo`
-    window.location.href = oktaAuthUrl
+    signIn()
   }
 
   if (isLoading) {
@@ -60,7 +31,6 @@ export default function TodoPage() {
     )
   }
 
-  // Show sign-in prompt if not authenticated
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
@@ -96,10 +66,8 @@ export default function TodoPage() {
     )
   }
 
-  // Show authenticated todo interface
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 dark:from-gray-900 dark:to-gray-800">
-      {/* Header */}
       <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -131,7 +99,6 @@ export default function TodoPage() {
 
       <div className="container mx-auto px-4 py-8">
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Add Todo & Stats */}
           <div className="lg:col-span-1 space-y-6">
             <Card>
               <CardHeader>
@@ -150,7 +117,6 @@ export default function TodoPage() {
             </Suspense>
           </div>
 
-          {/* Todo List */}
           <div className="lg:col-span-2">
             <Card>
               <CardHeader>
