@@ -24,6 +24,42 @@ interface TokenInfo {
   scope: string
 }
 
+function TokenCard({ title, token, type, usage }: { title: string; token: string; type: string; usage: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const copyToken = () => {
+    navigator.clipboard.writeText(token)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <Card className="p-4 border border-gray-200">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="font-semibold text-gray-900">{title}</h3>
+        <Button onClick={copyToken} variant="ghost" size="sm" className="text-purple-600 hover:text-purple-700">
+          {copied ? "✓" : "📋"}
+        </Button>
+      </div>
+
+      <div className="bg-gray-50 rounded p-3 mb-3">
+        <code className="text-xs text-gray-700 break-all">
+          {token.length > 50 ? `${token.substring(0, 50)}...` : token}
+        </code>
+      </div>
+
+      <div className="text-xs text-gray-500">
+        <p>
+          <strong>Type:</strong> {type}
+        </p>
+        <p>
+          <strong>Used for:</strong> {usage}
+        </p>
+      </div>
+    </Card>
+  )
+}
+
 export default function JarvisPage() {
   const { user, signIn, isLoading } = useAuth()
   const [messages, setMessages] = useState<Message[]>([])
@@ -36,7 +72,32 @@ export default function JarvisPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const loadTokens = async () => {
-    // Function to load tokens
+    setIsLoadingTokens(true)
+    try {
+      // Load from localStorage first
+      const storedTokens = localStorage.getItem("jarvis-tokens")
+      if (storedTokens) {
+        setTokens(JSON.parse(storedTokens))
+      }
+
+      // Also load from auth storage
+      const authTokens = {
+        access_token: localStorage.getItem("okta-token") || "",
+        id_token: localStorage.getItem("okta-id-token") || "",
+        refresh_token: localStorage.getItem("okta-refresh-token") || "",
+        token_type: "Bearer",
+        expires_in: 3600,
+        scope: "openid profile email",
+      }
+
+      if (authTokens.access_token) {
+        setTokens((prev) => ({ ...authTokens, ...prev }))
+      }
+    } catch (error) {
+      console.error("Failed to load tokens:", error)
+    } finally {
+      setIsLoadingTokens(false)
+    }
   }
 
   useEffect(() => {
@@ -69,6 +130,8 @@ export default function JarvisPage() {
     setIsGenerating(true)
 
     try {
+      console.log("[v0] JARVIS sending message:", userMessage.content)
+
       const response = await fetch("/api/jarvis/chat", {
         method: "POST",
         headers: {
@@ -80,8 +143,36 @@ export default function JarvisPage() {
           history: messages,
         }),
       })
+
+      console.log("[v0] JARVIS API response status:", response.status)
+
+      if (response.ok) {
+        const data = await response.json()
+
+        console.log("[v0] JARVIS API response data:", data)
+
+        if (data.tokens) {
+          console.log("[v0] JARVIS storing tokens:", data.tokens)
+          setTokens(data.tokens)
+          localStorage.setItem("jarvis-tokens", JSON.stringify(data.tokens))
+        }
+
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: data.message || data.response || "No response received",
+          timestamp: new Date().toISOString(),
+        }
+
+        console.log("[v0] JARVIS adding assistant message:", assistantMessage.content)
+        setMessages((prev) => [...prev, assistantMessage])
+      } else {
+        const errorText = await response.text()
+        console.error("[v0] JARVIS API error:", response.status, errorText)
+        throw new Error(`API error: ${response.status}`)
+      }
     } catch (error) {
-      console.error("Failed to send message:", error)
+      console.error("[v0] JARVIS chat error:", error)
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
@@ -215,6 +306,80 @@ export default function JarvisPage() {
           </div>
         </div>
       </div>
+
+      {sidebarOpen && (
+        <div className="fixed right-0 top-0 h-full w-96 bg-white shadow-2xl border-l border-gray-200 overflow-y-auto">
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900">OAuth Tokens</h2>
+              <Button
+                onClick={() => setSidebarOpen(false)}
+                variant="ghost"
+                size="sm"
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </Button>
+            </div>
+
+            {isLoadingTokens ? (
+              <div className="text-center py-8">
+                <div className="animate-spin w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                <p className="text-gray-500">Loading tokens...</p>
+              </div>
+            ) : tokens ? (
+              <div className="space-y-4">
+                {tokens.access_token && (
+                  <TokenCard
+                    title="Access Token"
+                    token={tokens.access_token}
+                    type="Bearer Token"
+                    usage="JARVIS Authentication"
+                  />
+                )}
+
+                {tokens.id_token && (
+                  <TokenCard title="ID Token" token={tokens.id_token} type="JWT Token" usage="User Identity" />
+                )}
+
+                {tokens.id_jag_token && (
+                  <TokenCard
+                    title="ID-JAG Token"
+                    token={tokens.id_jag_token}
+                    type="ID Assertion JWT"
+                    usage="Cross-App Access"
+                  />
+                )}
+
+                {tokens.todo_access_token && (
+                  <TokenCard
+                    title="Todo Access Token"
+                    token={tokens.todo_access_token}
+                    type="Bearer Token"
+                    usage="Todo0 API Access"
+                  />
+                )}
+
+                {tokens.refresh_token && (
+                  <TokenCard
+                    title="Refresh Token"
+                    token={tokens.refresh_token}
+                    type="Refresh Token"
+                    usage="Token Renewal"
+                  />
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-gray-500 mb-4">No tokens available</p>
+                <Button onClick={loadTokens} variant="outline" size="sm">
+                  Refresh Tokens
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
