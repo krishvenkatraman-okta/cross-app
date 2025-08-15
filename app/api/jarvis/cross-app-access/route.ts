@@ -15,6 +15,46 @@ export async function POST(request: NextRequest) {
 
     const idToken = authHeader.substring(7)
 
+    console.log("[v0] ID token length:", idToken.length)
+    console.log("[v0] ID token starts with:", idToken.substring(0, 50) + "...")
+
+    // Decode and validate the ID token structure
+    try {
+      const tokenParts = idToken.split(".")
+      if (tokenParts.length !== 3) {
+        console.error("[v0] Invalid ID token format - not a proper JWT")
+        return NextResponse.json({ error: "Invalid ID token format" }, { status: 400 })
+      }
+
+      const header = JSON.parse(Buffer.from(tokenParts[0], "base64url").toString())
+      const payload = JSON.parse(Buffer.from(tokenParts[1], "base64url").toString())
+
+      console.log("[v0] ID token header:", header)
+      console.log("[v0] ID token payload:", {
+        iss: payload.iss,
+        aud: payload.aud,
+        sub: payload.sub,
+        exp: payload.exp,
+        iat: payload.iat,
+        expired: payload.exp < Math.floor(Date.now() / 1000),
+      })
+
+      // Check if token is expired
+      if (payload.exp < Math.floor(Date.now() / 1000)) {
+        console.error("[v0] ID token is expired")
+        return NextResponse.json({ error: "ID token is expired" }, { status: 400 })
+      }
+
+      // Verify issuer matches expected Okta domain
+      if (!payload.iss || !payload.iss.includes("okta.com")) {
+        console.error("[v0] ID token issuer is not from Okta:", payload.iss)
+        return NextResponse.json({ error: "Invalid ID token issuer" }, { status: 400 })
+      }
+    } catch (decodeError) {
+      console.error("[v0] Failed to decode ID token:", decodeError)
+      return NextResponse.json({ error: "Failed to decode ID token" }, { status: 400 })
+    }
+
     const audienceUrl = target_app === "inventory" ? "https://auth.inventory.com/" : `https://auth.${target_app}.com/`
 
     const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
@@ -26,6 +66,13 @@ export async function POST(request: NextRequest) {
 
     console.log("[v0] Making ID-JAG token exchange request to Okta:", crossAppConfig.tokenExchangeEndpoint)
     console.log("[v0] Using client ID:", clientId)
+    console.log("[v0] Token exchange parameters:", {
+      grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+      requested_token_type: "urn:ietf:params:oauth:token-type:id-jag",
+      audience: audienceUrl,
+      subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
+      subject_token_length: idToken.length,
+    })
 
     const idJagResponse = await fetch(crossAppConfig.tokenExchangeEndpoint, {
       method: "POST",
