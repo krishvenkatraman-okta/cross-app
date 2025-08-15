@@ -61,8 +61,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine the target application based on audience
+    console.log("[v0] Determining target app for audience:", audience)
     const targetApp = determineTargetApp(audience)
+    console.log("[v0] Target app determined:", targetApp)
+
     if (!targetApp) {
+      console.error("[v0] No target app found for audience:", audience)
+      console.error(
+        "[v0] Available audience mappings:",
+        Object.keys({
+          "https://auth.todo0.com/": "todo0",
+          "https://auth.agent0.com/": "agent0",
+          "https://auth.inventory.com/": "inventory",
+          "todo0-auth-server": "todo0",
+          "agent0-auth-server": "agent0",
+          "inventory-auth-server": "inventory",
+        }),
+      )
       return NextResponse.json(
         { error: "invalid_target", error_description: "Invalid audience specified" },
         { status: 400 },
@@ -138,11 +153,16 @@ function determineTargetApp(audience: string) {
   const audienceMap: Record<string, string> = {
     "https://auth.todo0.com/": "todo0",
     "https://auth.agent0.com/": "agent0",
+    "https://auth.inventory.com/": "inventory",
     "todo0-auth-server": "todo0",
     "agent0-auth-server": "agent0",
+    "inventory-auth-server": "inventory",
   }
 
-  return audienceMap[audience] || null
+  console.log("[v0] Looking up audience in map:", audience)
+  const result = audienceMap[audience] || null
+  console.log("[v0] Audience lookup result:", result)
+  return result
 }
 
 async function generateIdJagToken(params: {
