@@ -224,10 +224,20 @@ async function getCrossAppToken(
     console.log("[v0] Checking for user token in cookies...")
 
     if (cookies) {
-      const tokenMatch = cookies.match(/okta-token=([^;]+)/)
-      if (tokenMatch) {
-        userIdToken = decodeURIComponent(tokenMatch[1])
-        console.log("[v0] Found real user token:", userIdToken?.substring(0, 20) + "...")
+      const oktaTokenMatch = cookies.match(/okta-token=([^;]+)/)
+      const oktaTokensMatch = cookies.match(/okta_tokens=([^;]+)/)
+      const accessTokenMatch = cookies.match(/okta_access_token=([^;]+)/)
+
+      if (oktaTokenMatch) {
+        userIdToken = decodeURIComponent(oktaTokenMatch[1])
+        console.log("[v0] Found okta-token:", userIdToken?.substring(0, 20) + "...")
+      } else if (oktaTokensMatch) {
+        const tokensData = JSON.parse(decodeURIComponent(oktaTokensMatch[1]))
+        userIdToken = tokensData.id_token || tokensData.access_token
+        console.log("[v0] Found okta_tokens, using id_token:", userIdToken?.substring(0, 20) + "...")
+      } else if (accessTokenMatch) {
+        userIdToken = decodeURIComponent(accessTokenMatch[1])
+        console.log("[v0] Found okta_access_token:", userIdToken?.substring(0, 20) + "...")
       }
     }
 

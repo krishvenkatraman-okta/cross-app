@@ -111,6 +111,10 @@ export default function JarvisPage() {
         allTokens = { ...allTokens, ...jarvisTokens }
       }
 
+      if (allTokens.inventory_access_token) {
+        allTokens.todo_access_token = allTokens.inventory_access_token
+      }
+
       console.log("[v0] JARVIS final loaded tokens:", allTokens)
       setTokens(allTokens)
     } catch (error) {
@@ -173,8 +177,9 @@ export default function JarvisPage() {
 
         if (data.tokens) {
           console.log("[v0] JARVIS storing tokens:", data.tokens)
-          setTokens(data.tokens)
+          setTokens((prev) => ({ ...prev, ...data.tokens }))
           localStorage.setItem("jarvis-tokens", JSON.stringify(data.tokens))
+          setTimeout(() => loadTokens(), 100)
         }
 
         const assistantMessage: Message = {
