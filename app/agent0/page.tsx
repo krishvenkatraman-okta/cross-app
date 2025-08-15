@@ -1,12 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useEffect, useRef } from "react"
+import { useAuth } from "@/components/auth-provider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Bot, User, Send } from "lucide-react"
-import { useChat } from "ai/react"
+import { Card } from "@/components/ui/card"
+import { Send, Bot, User } from "lucide-react"
 
 interface Message {
   id: string
@@ -16,187 +15,203 @@ interface Message {
 }
 
 export default function Agent0Page() {
-  const [user, setUser] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [tokens, setTokens] = useState<any>(null)
-
-  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
-    api: "/api/chat",
-    initialMessages: [
-      {
-        id: "1",
-        role: "assistant",
-        content:
-          "Hello! I'm Agent0, your AI assistant. I can help you manage your todos and answer questions about your tasks. What would you like to know?",
-      },
-    ],
-  })
+  const { user, signIn, isLoading } = useAuth()
+  const [messages, setMessages] = useState<Message[]>([])
+  const [input, setInput] = useState("")
+  const [isGenerating, setIsGenerating] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    checkAuth()
-  }, [])
-
-  const checkAuth = async () => {
-    try {
-      const token = localStorage.getItem("okta-token")
-      if (!token) {
-        setLoading(false)
-        return
-      }
-
-      const response = await fetch("/api/auth/validate", {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-
-      if (response.ok) {
-        const userData = await response.json()
-        setUser(userData)
-        await requestCrossAppTokens()
-      }
-    } catch (error) {
-      console.error("Auth check failed:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const signIn = () => {
-    const clientId = process.env.NEXT_PUBLIC_OKTA_AGENT0_CLIENT_ID
-    const issuer = process.env.NEXT_PUBLIC_OKTA_ISSUER
-    const redirectUri = `${window.location.origin}/callback`
-    const state = "agent0"
-    const nonce = Math.random().toString(36).substring(2, 15)
-
-    const authUrl =
-      `${issuer}/oauth2/v1/authorize?` +
-      `client_id=${clientId}&` +
-      `response_type=code&` +
-      `scope=openid profile email&` +
-      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-      `state=${state}&` +
-      `nonce=${nonce}`
-
-    window.location.href = authUrl
-  }
-
-  const requestCrossAppTokens = async () => {
-    try {
-      const response = await fetch("/api/cross-app/token-exchange", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("okta-token")}`,
+    if (user) {
+      // Add welcome message
+      setMessages([
+        {
+          id: "welcome",
+          role: "assistant",
+          content:
+            "Hello! I'm Agent0, your AI assistant. I can help you manage your todos and answer questions. Try asking me 'What's in my todo list?' or 'Show me my tasks'.",
+          timestamp: new Date().toISOString(),
         },
-        body: JSON.stringify({ targetApp: "todo0" }),
+      ])
+    }
+  }, [user])
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages])
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
+
+  const sendMessage = async () => {
+    if (!input.trim() || isGenerating) return
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: input.trim(),
+      timestamp: new Date().toISOString(),
+    }
+
+    setMessages((prev) => [...prev, userMessage])
+    setInput("")
+    setIsGenerating(true)
+
+    try {
+      const response = await fetch("/api/agent0/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: userMessage.content,
+          history: messages,
+        }),
       })
 
-      if (response.ok) {
-        const tokenData = await response.json()
-        setTokens(tokenData)
-        localStorage.setItem("cross-app-tokens", JSON.stringify(tokenData))
+      if (!response.ok) {
+        throw new Error("Failed to get response")
       }
+
+      const data = await response.json()
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: data.message,
+        timestamp: new Date().toISOString(),
+      }
+
+      setMessages((prev) => [...prev, assistantMessage])
     } catch (error) {
-      console.error("Failed to get cross-app tokens:", error)
+      console.error("Failed to send message:", error)
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "Sorry, I encountered an error. Please try again.",
+        timestamp: new Date().toISOString(),
+      }
+      setMessages((prev) => [...prev, errorMessage])
+    } finally {
+      setIsGenerating(false)
     }
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center">
-        <div>Loading...</div>
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 flex items-center justify-center">
+        <div className="text-lg text-gray-600">Loading...</div>
       </div>
     )
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto mb-4 w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <Bot className="h-6 w-6 text-purple-600" />
-            </div>
-            <CardTitle className="text-2xl">Agent0 - AI Assistant</CardTitle>
-            <p className="text-gray-600">Please sign in with Okta to access the AI assistant</p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button onClick={signIn} className="w-full">
-              Sign in with Okta
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Bot className="w-8 h-8 text-purple-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Agent0 AI Assistant</h1>
+          <p className="text-gray-600 mb-8">Please sign in with Okta to access your AI assistant</p>
+          <Button onClick={() => signIn("agent0")} className="w-full bg-gray-900 hover:bg-gray-800 text-white py-3">
+            Sign in with Okta
+          </Button>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-4">
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-6 text-center">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Agent0 - AI Assistant</h1>
-          <p className="text-gray-600">Welcome, {user.name}</p>
-          {tokens && <p className="text-sm text-green-600 mt-2">✅ Cross-app access enabled</p>}
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100">
+      <div className="max-w-4xl mx-auto p-4 h-screen flex flex-col">
+        {/* Header */}
+        <div className="bg-white rounded-t-2xl shadow-lg p-6 border-b">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+              <Bot className="w-6 h-6 text-purple-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Agent0</h1>
+              <p className="text-sm text-gray-500">AI Assistant with Todo Access</p>
+            </div>
+          </div>
         </div>
 
-        <Card className="h-[600px] flex flex-col">
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Bot className="h-5 w-5 mr-2" />
-              Chat with Agent0
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 flex flex-col">
-            <ScrollArea className="flex-1 mb-4">
-              <div className="space-y-4">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex items-start gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
-                  >
-                    {message.role === "assistant" && (
-                      <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                        <Bot className="h-4 w-4 text-purple-600" />
-                      </div>
-                    )}
-                    <div
-                      className={`max-w-[80%] p-3 rounded-lg ${
-                        message.role === "user" ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-900"
-                      }`}
-                    >
-                      {message.content}
-                    </div>
-                    {message.role === "user" && (
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                        <User className="h-4 w-4 text-blue-600" />
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {isLoading && (
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                      <Bot className="h-4 w-4 text-purple-600" />
-                    </div>
-                    <div className="bg-gray-100 text-gray-900 p-3 rounded-lg">Thinking...</div>
-                  </div>
-                )}
+        {/* Messages */}
+        <div className="flex-1 bg-white shadow-lg overflow-y-auto p-6 space-y-4">
+          {messages.map((message) => (
+            <div key={message.id} className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+              {message.role === "assistant" && (
+                <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Bot className="w-4 h-4 text-purple-600" />
+                </div>
+              )}
+              <Card
+                className={`max-w-[70%] p-4 ${
+                  message.role === "user" ? "bg-blue-500 text-white ml-auto" : "bg-gray-100 text-gray-900"
+                }`}
+              >
+                <p className="text-sm leading-relaxed">{message.content}</p>
+                <p className={`text-xs mt-2 ${message.role === "user" ? "text-blue-100" : "text-gray-500"}`}>
+                  {new Date(message.timestamp).toLocaleTimeString()}
+                </p>
+              </Card>
+              {message.role === "user" && (
+                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <User className="w-4 h-4 text-blue-600" />
+                </div>
+              )}
+            </div>
+          ))}
+          {isGenerating && (
+            <div className="flex gap-3 justify-start">
+              <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <Bot className="w-4 h-4 text-purple-600" />
               </div>
-            </ScrollArea>
+              <Card className="bg-gray-100 text-gray-900 p-4">
+                <div className="flex items-center gap-2">
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                    <div
+                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                      style={{ animationDelay: "0.1s" }}
+                    ></div>
+                    <div
+                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                      style={{ animationDelay: "0.2s" }}
+                    ></div>
+                  </div>
+                  <span className="text-sm text-gray-500">Agent0 is thinking...</span>
+                </div>
+              </Card>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
 
-            <form onSubmit={handleSubmit} className="flex gap-2">
-              <Input
-                value={input}
-                onChange={handleInputChange}
-                placeholder="Ask me about your todos or anything else..."
-                disabled={isLoading}
-                className="flex-1"
-              />
-              <Button type="submit" disabled={isLoading}>
-                <Send className="h-4 w-4" />
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+        {/* Input */}
+        <div className="bg-white rounded-b-2xl shadow-lg p-6 border-t">
+          <div className="flex gap-3">
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask me about your todos or anything else..."
+              className="flex-1 text-base py-3 px-4 border-gray-200 rounded-lg"
+              onKeyPress={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
+              disabled={isGenerating}
+            />
+            <Button
+              onClick={sendMessage}
+              disabled={!input.trim() || isGenerating}
+              className="bg-purple-500 hover:bg-purple-600 text-white px-6 py-3 rounded-lg"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          </div>
+          <p className="text-xs text-gray-500 mt-2 text-center">
+            Signed in as {user.email} • Agent0 can access your Todo0 data
+          </p>
+        </div>
       </div>
     </div>
   )

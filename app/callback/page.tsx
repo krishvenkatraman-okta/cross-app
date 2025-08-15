@@ -44,12 +44,18 @@ export default function CallbackPage() {
         // Set user in auth context
         setUser(user)
 
-        // Store tokens for cross-app access
         if (tokens) {
           localStorage.setItem("okta_tokens", JSON.stringify(tokens))
+          localStorage.setItem("okta_access_token", tokens.access_token)
         }
 
-        const redirectPath = state === "admin" ? "/admin" : "/todo"
+        let redirectPath = "/"
+        if (state === "agent0" || state === "admin") {
+          redirectPath = "/agent0"
+        } else if (state === "todo0" || state === "todo") {
+          redirectPath = "/todo0"
+        }
+
         router.push(redirectPath)
       } catch (err) {
         console.error("Callback processing error:", err)

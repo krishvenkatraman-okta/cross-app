@@ -7,12 +7,14 @@ export async function POST(request: NextRequest) {
     console.log("[v0] Callback received:", { code: code?.substring(0, 10) + "...", state })
 
     const isAgent0 = state === "agent0" || state === "admin"
+    const isTodo0 = state === "todo0" || state === "todo"
+
     const clientId = isAgent0
       ? process.env.NEXT_PUBLIC_OKTA_AGENT0_CLIENT_ID
       : process.env.NEXT_PUBLIC_OKTA_TODO_CLIENT_ID
     const clientSecret = isAgent0 ? process.env.OKTA_AGENT0_CLIENT_SECRET : process.env.OKTA_TODO_CLIENT_SECRET
 
-    console.log("[v0] Using client:", { clientId, isAgent0, state })
+    console.log("[v0] Using client:", { clientId, isAgent0, isTodo0, state })
 
     const host = request.headers.get("host")
     const protocol = request.headers.get("x-forwarded-proto") || "https"

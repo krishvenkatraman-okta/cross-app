@@ -13,7 +13,7 @@ interface User {
 interface AuthContextType {
   user: User | null
   isLoading: boolean
-  signIn: () => Promise<void>
+  signIn: (appType?: string) => Promise<void>
   signOut: () => Promise<void>
   hasPermission: (permission: string) => boolean
   setUser: (user: User | null) => void
@@ -61,15 +61,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const signIn = async () => {
-    const currentPath = window.location.pathname
-    const isAgent0App = currentPath.includes("/admin") || currentPath.includes("/users")
+  const signIn = async (appType?: string) => {
+    let detectedAppType = appType
+
+    if (!detectedAppType) {
+      const currentPath = window.location.pathname
+      if (currentPath.includes("/todo0")) {
+        detectedAppType = "todo0"
+      } else if (currentPath.includes("/agent0")) {
+        detectedAppType = "agent0"
+      } else if (currentPath.includes("/admin") || currentPath.includes("/users")) {
+        detectedAppType = "agent0"
+      } else {
+        detectedAppType = "todo0" // default to todo0
+      }
+    }
+
+    const isAgent0App = detectedAppType === "agent0"
+    const isTodo0App = detectedAppType === "todo0"
 
     const clientId = isAgent0App
       ? process.env.NEXT_PUBLIC_OKTA_AGENT0_CLIENT_ID
       : process.env.NEXT_PUBLIC_OKTA_TODO_CLIENT_ID
 
-    const state = isAgent0App ? "agent0" : "todo"
+    const state = isAgent0App ? "agent0" : "todo0"
 
     const issuer = process.env.NEXT_PUBLIC_OKTA_ISSUER
     const redirectUri = `${window.location.origin}/callback`
