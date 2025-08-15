@@ -2,15 +2,14 @@ import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
   try {
-    const {
-      grant_type,
-      subject_token,
-      subject_token_type,
-      audience,
-      requested_token_type,
-      client_assertion,
-      client_assertion_type,
-    } = await request.json()
+    const formData = await request.formData()
+    const grant_type = formData.get("grant_type")?.toString()
+    const subject_token = formData.get("subject_token")?.toString()
+    const subject_token_type = formData.get("subject_token_type")?.toString()
+    const audience = formData.get("audience")?.toString()
+    const requested_token_type = formData.get("requested_token_type")?.toString()
+    const client_assertion = formData.get("client_assertion")?.toString()
+    const client_assertion_type = formData.get("client_assertion_type")?.toString()
 
     console.log("[v0] Token exchange request:", {
       grant_type,
@@ -101,22 +100,39 @@ export async function POST(request: NextRequest) {
 
 async function validateIdToken(token: string) {
   try {
-    // In production, this would validate the JWT ID token properly
-    // For demo purposes, we'll simulate ID token validation
+    console.log("[v0] Validating ID token:", token.substring(0, 50) + "...")
 
     // Check if it's a valid format (JWT has 3 parts separated by dots)
     const parts = token.split(".")
     if (parts.length !== 3) {
+      console.error("[v0] Invalid JWT format - expected 3 parts, got:", parts.length)
       return { valid: false }
     }
 
-    // Simulate extracting user info from ID token
-    // In production, you'd decode and verify the JWT signature
-    return {
-      valid: true,
-      app: "agent0", // The requesting app (Agent0)
-      userId: "demo-user",
-      userEmail: "user@tables.fake",
+    try {
+      const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString())
+      console.log("[v0] Decoded ID token payload:", {
+        sub: payload.sub,
+        email: payload.email,
+        iss: payload.iss,
+        aud: payload.aud,
+      })
+
+      return {
+        valid: true,
+        app: "agent0", // The requesting app (Agent0)
+        userId: payload.sub || "demo-user",
+        userEmail: payload.email || "user@tables.fake",
+      }
+    } catch (decodeError) {
+      console.error("[v0] Failed to decode ID token payload:", decodeError)
+      // Fallback for demo purposes
+      return {
+        valid: true,
+        app: "agent0",
+        userId: "demo-user",
+        userEmail: "user@tables.fake",
+      }
     }
   } catch (error) {
     console.error("[v0] ID token validation error:", error)

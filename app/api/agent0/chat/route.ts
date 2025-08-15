@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { generateText } from "ai"
 import { openai } from "@ai-sdk/openai"
+import { createDemoIdToken } from "./utils"
 
 interface Message {
   role: "user" | "assistant"
@@ -86,15 +87,15 @@ ${todoData.todos.map((todo: any) => `- ${todo.text} ${todo.completed ? "(complet
 
 async function getCrossAppToken(request: NextRequest, targetApp: string): Promise<string | null> {
   try {
-    // In a real implementation, we'd get the user's ID token from the session
-    // For demo purposes, we'll simulate having an Agent0 ID token
-    const agentIdToken = "demo-agent0-id-token"
+    // In a real implementation, we'd get this from the user's authenticated session
+    // For now, we'll create a properly formatted demo JWT token
+    const demoIdToken = createDemoIdToken()
 
     const response = await fetch(`${request.nextUrl.origin}/api/agent0/cross-app-access`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${agentIdToken}`,
+        Authorization: `Bearer ${demoIdToken}`,
       },
       body: JSON.stringify({ target_app: targetApp }),
     })

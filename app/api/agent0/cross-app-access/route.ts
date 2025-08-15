@@ -17,9 +17,9 @@ export async function POST(request: NextRequest) {
     const idJagResponse = await fetch(`${request.nextUrl.origin}/api/token-exchange`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: JSON.stringify({
+      body: new URLSearchParams({
         grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
         requested_token_type: "urn:ietf:params:oauth:token-type:id-jag",
         audience: `https://auth.${target_app}.com/`,
