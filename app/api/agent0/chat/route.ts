@@ -164,7 +164,7 @@ async function getCrossAppToken(
       const data = await response.json()
       console.log("[v0] Obtained cross-app access tokens for", targetApp)
       return {
-        id_jag_token: data.id_jag_token || "demo-id-jag-token",
+        id_jag_token: data.id_jag_token || data.access_token, // Use actual token
         todo_access_token: data.access_token,
       }
     } else {

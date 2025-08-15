@@ -7,41 +7,47 @@ const todos: Array<{
   completed: boolean
   createdAt: string
   userId: string
-}> = [
-  {
-    id: "1",
-    text: "Analyse current week expenses",
-    completed: false,
-    createdAt: new Date().toISOString(),
-    userId: "demo-user",
-  },
-  {
-    id: "2",
-    text: "Water indoor plants",
-    completed: false,
-    createdAt: new Date().toISOString(),
-    userId: "demo-user",
-  },
-  {
-    id: "3",
-    text: "Organize wardrobe",
-    completed: false,
-    createdAt: new Date().toISOString(),
-    userId: "demo-user",
-  },
-  {
-    id: "4",
-    text: "Deep clean kitchen",
-    completed: false,
-    createdAt: new Date().toISOString(),
-    userId: "demo-user",
-  },
-]
+}> = []
+
+function initializeTodos(userId: string) {
+  if (todos.length === 0) {
+    todos.push(
+      {
+        id: "1",
+        text: "Analyse current week expenses",
+        completed: false,
+        createdAt: new Date().toISOString(),
+        userId: userId,
+      },
+      {
+        id: "2",
+        text: "Water indoor plants",
+        completed: false,
+        createdAt: new Date().toISOString(),
+        userId: userId,
+      },
+      {
+        id: "3",
+        text: "Organize wardrobe",
+        completed: false,
+        createdAt: new Date().toISOString(),
+        userId: userId,
+      },
+      {
+        id: "4",
+        text: "Deep clean kitchen",
+        completed: false,
+        createdAt: new Date().toISOString(),
+        userId: userId,
+      },
+    )
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization")
-    let userId = "demo-user" // Default for demo
+    let userId = "00up6GlznvCobuu31d7" // Use real Okta user ID as default
 
     if (authHeader && authHeader.startsWith("Bearer ")) {
       const token = authHeader.substring(7)
@@ -65,6 +71,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    initializeTodos(userId)
+
     const userTodos = todos.filter((todo) => todo.userId === userId)
 
     return NextResponse.json({
@@ -85,8 +93,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Todo text is required" }, { status: 400 })
     }
 
-    // In production, get user from JWT token
-    const userId = "demo-user"
+    const authHeader = request.headers.get("authorization")
+    let userId = "00up6GlznvCobuu31d7" // Default to real Okta user ID
+
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.substring(7)
+      try {
+        // Decode JWT to get user info
+        const payload = JSON.parse(atob(token.split(".")[1]))
+        userId = payload.sub || payload.user_id || userId
+      } catch (error) {
+        console.log("[v0] Could not decode token, using default user ID")
+      }
+    }
 
     const newTodo = {
       id: Date.now().toString(),

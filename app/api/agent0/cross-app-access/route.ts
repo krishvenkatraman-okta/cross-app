@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       access_token: accessToken.access_token,
+      id_jag_token: idJagToken.access_token,
       token_type: accessToken.token_type,
       expires_in: accessToken.expires_in,
       scope: accessToken.scope,

@@ -9,34 +9,35 @@ const todos: Array<{
 }> = []
 
 if (todos.length === 0) {
+  const realUserId = "00up6GlznvCobuu31d7" // Real Okta user ID
   todos.push(
     {
       id: "1",
       text: "Analyse current week expenses",
       completed: false,
       createdAt: new Date().toISOString(),
-      userId: "demo-user",
+      userId: realUserId,
     },
     {
       id: "2",
       text: "Water indoor plants",
       completed: false,
       createdAt: new Date().toISOString(),
-      userId: "demo-user",
+      userId: realUserId,
     },
     {
       id: "3",
       text: "Organize wardrobe",
       completed: false,
       createdAt: new Date().toISOString(),
-      userId: "demo-user",
+      userId: realUserId,
     },
     {
       id: "4",
       text: "Deep clean kitchen",
       completed: false,
       createdAt: new Date().toISOString(),
-      userId: "demo-user",
+      userId: realUserId,
     },
   )
 }
@@ -46,8 +47,18 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const { completed } = await request.json()
     const todoId = params.id
 
-    // In production, get user from JWT token
-    const userId = "demo-user"
+    const authHeader = request.headers.get("authorization")
+    let userId = "00up6GlznvCobuu31d7" // Default to real Okta user ID
+
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.substring(7)
+      try {
+        const payload = JSON.parse(atob(token.split(".")[1]))
+        userId = payload.sub || payload.user_id || userId
+      } catch (error) {
+        console.log("[v0] Could not decode token, using default user ID")
+      }
+    }
 
     const todoIndex = todos.findIndex((todo) => todo.id === todoId && todo.userId === userId)
 
@@ -60,6 +71,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       completed: !!completed,
     }
 
+    console.log("[v0] Todo updated:", { id: todoId, completed: !!completed, userId })
+
     return NextResponse.json({ todo: todos[todoIndex] })
   } catch (error) {
     console.error("[v0] Failed to update todo:", error)
@@ -71,8 +84,18 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
   try {
     const todoId = params.id
 
-    // In production, get user from JWT token
-    const userId = "demo-user"
+    const authHeader = request.headers.get("authorization")
+    let userId = "00up6GlznvCobuu31d7" // Default to real Okta user ID
+
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.substring(7)
+      try {
+        const payload = JSON.parse(atob(token.split(".")[1]))
+        userId = payload.sub || payload.user_id || userId
+      } catch (error) {
+        console.log("[v0] Could not decode token, using default user ID")
+      }
+    }
 
     const todoIndex = todos.findIndex((todo) => todo.id === todoId && todo.userId === userId)
 
