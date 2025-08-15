@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import crypto from "crypto"
+import { crossAppConfig } from "@/lib/okta-config"
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,9 +17,10 @@ export async function POST(request: NextRequest) {
 
     const audienceUrl = target_app === "inventory" ? "https://auth.inventory.com/" : `https://auth.${target_app}.com/`
 
-    const clientAssertion = await generateClientAssertion("jarvis-client", audienceUrl)
+    const clientAssertion = await generateClientAssertion("jarvis-client", crossAppConfig.tokenExchangeEndpoint)
 
-    const idJagResponse = await fetch(`${request.nextUrl.origin}/api/token-exchange`, {
+    console.log("[v0] Making ID-JAG token exchange request to Okta:", crossAppConfig.tokenExchangeEndpoint)
+    const idJagResponse = await fetch(crossAppConfig.tokenExchangeEndpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -35,13 +37,23 @@ export async function POST(request: NextRequest) {
     })
 
     if (!idJagResponse.ok) {
-      const error = await idJagResponse.json()
-      console.error("[v0] ID-JAG exchange failed:", error)
-      return NextResponse.json({ error: "ID-JAG exchange failed", details: error }, { status: 400 })
+      const errorText = await idJagResponse.text()
+      console.error("[v0] ID-JAG exchange failed:", {
+        status: idJagResponse.status,
+        statusText: idJagResponse.statusText,
+        body: errorText,
+      })
+      return NextResponse.json(
+        {
+          error: "ID-JAG exchange failed",
+          details: { status: idJagResponse.status, message: errorText },
+        },
+        { status: 400 },
+      )
     }
 
     const idJagToken = await idJagResponse.json()
-    console.log("[v0] ID-JAG token obtained")
+    console.log("[v0] ID-JAG token obtained from Okta")
 
     const tokenEndpoint =
       target_app === "inventory"
@@ -107,7 +119,7 @@ async function generateClientAssertion(clientId: string, audience: string) {
   const claims = {
     iss: clientId,
     sub: clientId,
-    aud: process.env.NEXT_PUBLIC_OKTA_ISSUER || "https://dev-okta.okta.com",
+    aud: audience,
     iat: now,
     exp: now + 300,
     jti: crypto.randomUUID(),
