@@ -1,7 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { generateText } from "ai"
-import { openai } from "@ai-sdk/openai"
+import { createOpenAI } from "@ai-sdk/openai"
 import { createDemoIdToken } from "./utils"
+
+const openai = createOpenAI({
+  baseURL: "https://gateway.ai.cloudflare.com/v1/YOUR_ACCOUNT_ID/YOUR_GATEWAY_ID/openai",
+  apiKey: process.env.OPENAI_API_KEY || "demo-key", // Can be a placeholder when using gateway
+})
 
 interface Message {
   role: "user" | "assistant"
@@ -67,7 +72,6 @@ ${todoData.todos.map((todo: any) => `- ${todo.text} ${todo.completed ? "(complet
       content: msg.content,
     }))
 
-    // Generate response using Vercel AI SDK
     const { text } = await generateText({
       model: openai("gpt-4o-mini"),
       system: systemPrompt,
