@@ -78,25 +78,31 @@ export async function POST(request: NextRequest) {
       audience: audienceUrl,
       subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
       subject_token_length: idToken.length,
+      subject_token_preview: idToken.substring(0, 100) + "...",
       client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
       client_assertion_length: clientAssertion.length,
       client_assertion_preview: clientAssertion.substring(0, 50) + "...",
     })
+
+    const requestBody = new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+      requested_token_type: "urn:ietf:params:oauth:token-type:id-jag",
+      audience: audienceUrl,
+      subject_token: idToken,
+      subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
+      client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+      client_assertion: clientAssertion,
+    })
+
+    console.log("[v0] Request body parameters:", Array.from(requestBody.keys()))
+    console.log("[v0] Subject token is present in request:", requestBody.has("subject_token"))
 
     const idJagResponse = await fetch(dynamicTokenEndpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: new URLSearchParams({
-        grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
-        requested_token_type: "urn:ietf:params:oauth:token-type:id-jag",
-        audience: audienceUrl,
-        subject_token: idToken,
-        subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
-        client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-        client_assertion: clientAssertion,
-      }),
+      body: requestBody,
     })
 
     if (!idJagResponse.ok) {
