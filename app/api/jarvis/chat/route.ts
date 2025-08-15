@@ -152,4 +152,3 @@ async function getCrossAppToken(
     return null
   }
 }
-</merged_code>

@@ -1,5 +1,5 @@
 {
-  "name": "my-v0-project",
+  "name": "okta-cross-app-demo",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -43,7 +43,6 @@
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
     "embla-carousel-react": "8.5.1",
-    "geist": "latest",
     "input-otp": "1.4.1",
     "lucide-react": "^0.454.0",
     "next": "15.2.4",
