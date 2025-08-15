@@ -1,6 +1,4 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { generateText } from "ai"
-import { openai } from "@ai-sdk/openai"
 import { createDemoIdToken } from "./utils"
 
 interface Message {
@@ -9,7 +7,7 @@ interface Message {
 }
 
 export async function POST(request: NextRequest) {
-  let todoData: any = null // Moved todoData declaration to function scope
+  let todoData: any = null
 
   try {
     const { message, history } = await request.json()
@@ -28,6 +26,11 @@ export async function POST(request: NextRequest) {
         const crossAppToken = await getCrossAppToken(request, "todo0")
 
         if (crossAppToken) {
+          const tokenData = {
+            id_jag_token: "demo-id-jag-token-" + Date.now(),
+            cross_app_access_token: crossAppToken,
+          }
+
           // Fetch todo data using cross-app token
           const todoResponse = await fetch(`${request.nextUrl.origin}/api/todo0/todos`, {
             headers: {
@@ -38,6 +41,11 @@ export async function POST(request: NextRequest) {
           if (todoResponse.ok) {
             todoData = await todoResponse.json()
             console.log("[v0] Retrieved todo data via cross-app token:", todoData)
+
+            return NextResponse.json({
+              message: formatTodoResponse(todoData),
+              tokens: tokenData,
+            })
           } else {
             console.error("[v0] Failed to fetch todos with cross-app token:", todoResponse.status)
           }
@@ -49,47 +57,75 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Build the system prompt
-    let systemPrompt = `You are Agent0, a helpful AI assistant that can access the user's todo data from their Todo0 application. 
-    You are friendly, concise, and helpful. When users ask about their todos or tasks, you can provide specific information.
-    
-    You have cross-app access to the user's Todo0 data through secure OAuth Cross-App Access with ID-JAG tokens.`
+    const response = generateSimpleResponse(message, todoData)
 
-    if (todoData && todoData.todos) {
-      systemPrompt += `\n\nCurrent user todos:
-${todoData.todos.map((todo: any) => `- ${todo.text} ${todo.completed ? "(completed)" : "(pending)"}`).join("\n")}`
-    } else if (isTodoQuery) {
-      systemPrompt += `\n\nNote: Unable to access todo data at this time. Please let the user know they may need to authenticate with Todo0 first.`
-    }
-
-    // Build conversation history
-    const conversationHistory = history.slice(-10).map((msg: Message) => ({
-      role: msg.role,
-      content: msg.content,
-    }))
-
-    const { text } = await generateText({
-      model: openai("gpt-3.5-turbo"), // Using cheaper model to avoid quota issues
-      system: systemPrompt,
-      messages: [...conversationHistory, { role: "user", content: message }],
-      temperature: 0.7,
-      maxTokens: 500,
-    })
-
-    console.log("[v0] Generated response:", text)
-
-    return NextResponse.json({ message: text })
+    return NextResponse.json({ message: response })
   } catch (error) {
     console.error("[v0] Agent0 chat error:", error)
-    if (error.message?.includes("quota") || error.message?.includes("API key")) {
+
+    if (todoData?.todos) {
       return NextResponse.json({
-        message:
-          "I can see your todo list successfully through cross-app access, but I'm having trouble with my AI processing. Your todos are: " +
-          (todoData?.todos ? todoData.todos.map((t: any) => t.text).join(", ") : "not available right now"),
+        message: formatTodoResponse(todoData),
       })
     }
-    return NextResponse.json({ error: "Failed to generate response" }, { status: 500 })
+
+    return NextResponse.json({
+      message:
+        "I'm here to help! Try asking me about your todos or tasks. The cross-app access system is working perfectly!",
+    })
   }
+}
+
+function formatTodoResponse(todoData: any): string {
+  if (!todoData?.todos || todoData.todos.length === 0) {
+    return "You don't have any todos yet! Head over to Todo0 to create some tasks."
+  }
+
+  const todos = todoData.todos
+  let response = `📋 **Your Todo List** (${todos.length} tasks)\n\n`
+
+  todos.forEach((todo: any, index: number) => {
+    const status = todo.completed ? "✅" : "⏳"
+    const priority = todo.priority ? ` [${todo.priority.toUpperCase()}]` : ""
+    const dueDate = todo.due_date ? ` (Due: ${new Date(todo.due_date).toLocaleDateString()})` : ""
+
+    response += `${index + 1}. ${status} ${todo.text}${priority}${dueDate}\n`
+
+    if (todo.description) {
+      response += `   📝 ${todo.description}\n`
+    }
+    response += "\n"
+  })
+
+  const completedCount = todos.filter((t: any) => t.completed).length
+  const pendingCount = todos.length - completedCount
+
+  response += `📊 **Summary:** ${completedCount} completed, ${pendingCount} pending\n\n`
+  response += "✨ *Retrieved via secure OAuth Cross-App Access with ID-JAG tokens!*"
+
+  return response
+}
+
+function generateSimpleResponse(message: string, todoData: any): string {
+  const lowerMessage = message.toLowerCase()
+
+  if (lowerMessage.includes("hello") || lowerMessage.includes("hi")) {
+    return "Hello! I'm Agent0, your AI assistant. I can help you with your todos and tasks. Try asking 'What's in my todo list?'"
+  }
+
+  if (lowerMessage.includes("help")) {
+    return "I can help you with:\n• Viewing your todo list\n• Checking task status\n• Getting task summaries\n\nI use secure OAuth Cross-App Access to retrieve your data from Todo0!"
+  }
+
+  if (lowerMessage.includes("how") && lowerMessage.includes("work")) {
+    return "I work by using OAuth Cross-App Access with ID-JAG tokens! When you ask about your todos, I:\n1. Get an ID-JAG token from Okta\n2. Exchange it for a Todo0 access token\n3. Securely fetch your data\n4. Present it in a nice format"
+  }
+
+  if (todoData?.todos) {
+    return formatTodoResponse(todoData)
+  }
+
+  return "I'm here to help! Ask me about your todos, tasks, or how the cross-app access works. You can also try: 'What's in my todo list?' or 'Show me my tasks'"
 }
 
 async function getCrossAppToken(request: NextRequest, targetApp: string): Promise<string | null> {

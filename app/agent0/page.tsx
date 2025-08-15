@@ -18,6 +18,8 @@ interface TokenInfo {
   access_token: string
   refresh_token?: string
   id_token?: string
+  id_jag_token?: string
+  cross_app_access_token?: string
   token_type: string
   expires_in: number
   scope: string
@@ -112,6 +114,13 @@ export default function Agent0Page() {
       }
 
       const data = await response.json()
+
+      if (data.tokens) {
+        const currentTokens = JSON.parse(localStorage.getItem("okta_tokens") || "{}")
+        const updatedTokens = { ...currentTokens, ...data.tokens }
+        localStorage.setItem("okta_tokens", JSON.stringify(updatedTokens))
+        setTokens(updatedTokens)
+      }
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -345,6 +354,54 @@ export default function Agent0Page() {
                     </div>
                     <div className="bg-gray-50 rounded p-3 font-mono text-xs break-all">
                       {formatToken(tokens.id_token)}
+                    </div>
+                  </Card>
+                )}
+
+                {/* ID-JAG Token */}
+                {tokens.id_jag_token && (
+                  <Card className="p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-gray-900">ID-JAG Token</h3>
+                      <Button
+                        onClick={() => copyToClipboard(tokens.id_jag_token!)}
+                        variant="ghost"
+                        size="sm"
+                        className="text-purple-600 hover:text-purple-700 p-1"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </Button>
+                    </div>
+                    <div className="bg-gray-50 rounded p-3 font-mono text-xs break-all">
+                      {formatToken(tokens.id_jag_token)}
+                    </div>
+                    <div className="mt-2 text-xs text-gray-500">
+                      <div>Type: ID Assertion JWT</div>
+                      <div>Used for: Cross-App Access</div>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Cross-App Access Token */}
+                {tokens.cross_app_access_token && (
+                  <Card className="p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-gray-900">Cross-App Access Token</h3>
+                      <Button
+                        onClick={() => copyToClipboard(tokens.cross_app_access_token!)}
+                        variant="ghost"
+                        size="sm"
+                        className="text-purple-600 hover:text-purple-700 p-1"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </Button>
+                    </div>
+                    <div className="bg-gray-50 rounded p-3 font-mono text-xs break-all">
+                      {formatToken(tokens.cross_app_access_token)}
+                    </div>
+                    <div className="mt-2 text-xs text-gray-500">
+                      <div>Type: Bearer Token</div>
+                      <div>Access: Todo0 Resources</div>
                     </div>
                   </Card>
                 )}
