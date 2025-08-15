@@ -16,6 +16,7 @@ interface AuthContextType {
   signIn: () => Promise<void>
   signOut: () => Promise<void>
   hasPermission: (permission: string) => boolean
+  setUser: (user: User | null) => void
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -30,47 +31,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkAuthStatus = async () => {
     try {
-      // Check if user is already authenticated (e.g., from callback)
-      const urlParams = new URLSearchParams(window.location.search)
-      const code = urlParams.get("code")
-      const state = urlParams.get("state")
-
-      if (code && state) {
-        // Handle OAuth callback
-        await handleCallback(code, state)
-      } else {
-        // Check for existing session
-        const token = localStorage.getItem("okta_access_token")
-        if (token) {
-          await validateToken(token)
-        }
+      // Check for existing session
+      const token = localStorage.getItem("okta_access_token")
+      if (token) {
+        await validateToken(token)
       }
     } catch (error) {
       console.error("Auth check failed:", error)
     } finally {
       setIsLoading(false)
-    }
-  }
-
-  const handleCallback = async (code: string, state: string) => {
-    try {
-      // Exchange code for tokens
-      const response = await fetch("/api/auth/callback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, state }),
-      })
-
-      if (response.ok) {
-        const { user: userData, tokens } = await response.json()
-        setUser(userData)
-        localStorage.setItem("okta_access_token", tokens.access_token)
-
-        // Clean up URL
-        window.history.replaceState({}, document.title, window.location.pathname)
-      }
-    } catch (error) {
-      console.error("Callback handling failed:", error)
     }
   }
 
@@ -93,7 +62,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signIn = async () => {
-    const clientId = process.env.NEXT_PUBLIC_OKTA_TODO_CLIENT_ID
+    const currentPath = window.location.pathname
+    const isAgent0App = currentPath.includes("/admin") || currentPath.includes("/users")
+
+    const clientId = isAgent0App
+      ? process.env.NEXT_PUBLIC_OKTA_AGENT0_CLIENT_ID
+      : process.env.NEXT_PUBLIC_OKTA_TODO_CLIENT_ID
+
+    const state = isAgent0App ? "agent0" : "todo"
+
     const issuer = process.env.NEXT_PUBLIC_OKTA_ISSUER
     const redirectUri = `${window.location.origin}/callback`
 
@@ -102,7 +79,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    const state = Math.random().toString(36).substring(2, 15)
     const nonce = Math.random().toString(36).substring(2, 15)
 
     localStorage.setItem("okta_state", state)
@@ -116,6 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     authUrl.searchParams.set("state", state)
     authUrl.searchParams.set("nonce", nonce)
 
+    console.log("[v0] Starting OAuth with:", { clientId, state, redirectUri })
     window.location.href = authUrl.toString()
   }
 
@@ -145,6 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signIn,
         signOut,
         hasPermission,
+        setUser, // Added setUser to context
       }}
     >
       {children}
