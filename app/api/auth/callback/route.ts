@@ -4,25 +4,56 @@ export async function POST(request: NextRequest) {
   try {
     const { code, state } = await request.json()
 
+    console.log("[v0] Callback received:", { code: code?.substring(0, 10) + "...", state })
+
+    const isAgent0 = state === "agent0" || state === "admin"
+    const clientId = isAgent0
+      ? process.env.NEXT_PUBLIC_OKTA_AGENT0_CLIENT_ID
+      : process.env.NEXT_PUBLIC_OKTA_TODO_CLIENT_ID
+    const clientSecret = isAgent0 ? process.env.OKTA_AGENT0_CLIENT_SECRET : process.env.OKTA_TODO_CLIENT_SECRET
+
+    console.log("[v0] Using client:", { clientId, isAgent0, state })
+
+    const baseUrl = process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+    const redirectUri = `${baseUrl}/callback`
+
+    console.log("[v0] Token exchange params:", {
+      issuer: process.env.NEXT_PUBLIC_OKTA_ISSUER,
+      redirectUri,
+      clientId,
+    })
+
     // Exchange authorization code for tokens
     const tokenResponse = await fetch(`${process.env.NEXT_PUBLIC_OKTA_ISSUER}/oauth2/default/v1/token`, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        Authorization: `Basic ${Buffer.from(`${process.env.NEXT_PUBLIC_OKTA_TODO_CLIENT_ID}:${process.env.OKTA_TODO_CLIENT_SECRET}`).toString("base64")}`,
+        Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
       },
       body: new URLSearchParams({
         grant_type: "authorization_code",
         code,
-        redirect_uri: `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"}/callback`,
+        redirect_uri: redirectUri,
       }),
     })
 
     if (!tokenResponse.ok) {
-      throw new Error("Token exchange failed")
+      const errorText = await tokenResponse.text()
+      console.error("[v0] Token exchange failed:", {
+        status: tokenResponse.status,
+        statusText: tokenResponse.statusText,
+        error: errorText,
+      })
+      throw new Error(`Token exchange failed: ${tokenResponse.status} ${errorText}`)
     }
 
     const tokens = await tokenResponse.json()
+    console.log("[v0] Token exchange successful:", {
+      hasAccessToken: !!tokens.access_token,
+      tokenType: tokens.token_type,
+    })
 
     // Get user info
     const userResponse = await fetch(`${process.env.NEXT_PUBLIC_OKTA_ISSUER}/oauth2/default/v1/userinfo`, {
@@ -32,10 +63,19 @@ export async function POST(request: NextRequest) {
     })
 
     if (!userResponse.ok) {
-      throw new Error("User info fetch failed")
+      const errorText = await userResponse.text()
+      console.error("[v0] User info fetch failed:", {
+        status: userResponse.status,
+        error: errorText,
+      })
+      throw new Error(`User info fetch failed: ${userResponse.status} ${errorText}`)
     }
 
     const userInfo = await userResponse.json()
+    console.log("[v0] User info retrieved:", {
+      sub: userInfo.sub,
+      email: userInfo.email,
+    })
 
     const user = {
       id: userInfo.sub,
@@ -46,7 +86,13 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ user, tokens })
   } catch (error) {
-    console.error("Auth callback error:", error)
-    return NextResponse.json({ error: "Authentication failed" }, { status: 400 })
+    console.error("[v0] Auth callback error:", error)
+    return NextResponse.json(
+      {
+        error: "Authentication failed",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 400 },
+    )
   }
 }
