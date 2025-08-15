@@ -78,6 +78,9 @@ export async function POST(request: NextRequest) {
       audience: audienceUrl,
       subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
       subject_token_length: idToken.length,
+      client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+      client_assertion_length: clientAssertion.length,
+      client_assertion_preview: clientAssertion.substring(0, 50) + "...",
     })
 
     const idJagResponse = await fetch(dynamicTokenEndpoint, {
