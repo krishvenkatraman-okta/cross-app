@@ -1,12 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { generateText } from "ai"
-import { createOpenAI } from "@ai-sdk/openai"
+import { openai } from "@ai-sdk/openai"
 import { createDemoIdToken } from "./utils"
-
-const openai = createOpenAI({
-  baseURL: "https://gateway.ai.cloudflare.com/v1/YOUR_ACCOUNT_ID/YOUR_GATEWAY_ID/openai",
-  apiKey: process.env.OPENAI_API_KEY || "demo-key", // Can be a placeholder when using gateway
-})
 
 interface Message {
   role: "user" | "assistant"
@@ -14,6 +9,8 @@ interface Message {
 }
 
 export async function POST(request: NextRequest) {
+  let todoData: any = null // Moved todoData declaration to function scope
+
   try {
     const { message, history } = await request.json()
 
@@ -26,7 +23,6 @@ export async function POST(request: NextRequest) {
       message.toLowerCase().includes("list") ||
       (message.toLowerCase().includes("what") && message.toLowerCase().includes("my"))
 
-    let todoData = null
     if (isTodoQuery) {
       try {
         const crossAppToken = await getCrossAppToken(request, "todo0")
@@ -73,7 +69,7 @@ ${todoData.todos.map((todo: any) => `- ${todo.text} ${todo.completed ? "(complet
     }))
 
     const { text } = await generateText({
-      model: openai("gpt-4o-mini"),
+      model: openai("gpt-3.5-turbo"), // Using cheaper model to avoid quota issues
       system: systemPrompt,
       messages: [...conversationHistory, { role: "user", content: message }],
       temperature: 0.7,
@@ -85,6 +81,13 @@ ${todoData.todos.map((todo: any) => `- ${todo.text} ${todo.completed ? "(complet
     return NextResponse.json({ message: text })
   } catch (error) {
     console.error("[v0] Agent0 chat error:", error)
+    if (error.message?.includes("quota") || error.message?.includes("API key")) {
+      return NextResponse.json({
+        message:
+          "I can see your todo list successfully through cross-app access, but I'm having trouble with my AI processing. Your todos are: " +
+          (todoData?.todos ? todoData.todos.map((t: any) => t.text).join(", ") : "not available right now"),
+      })
+    }
     return NextResponse.json({ error: "Failed to generate response" }, { status: 500 })
   }
 }
