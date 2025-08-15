@@ -82,8 +82,18 @@ export default function JarvisPage() {
   const loadTokens = async () => {
     setIsLoadingTokens(true)
     try {
+      console.log("[v0] JARVIS checking localStorage keys...")
+      console.log("[v0] All localStorage keys:", Object.keys(localStorage))
+
       const storedOktaTokens = localStorage.getItem("okta_tokens")
       const storedJarvisTokens = localStorage.getItem("jarvis-tokens")
+      const storedAccessToken = localStorage.getItem("okta_access_token")
+      const storedIdToken = localStorage.getItem("okta_id_token")
+
+      console.log("[v0] okta_tokens:", storedOktaTokens)
+      console.log("[v0] jarvis-tokens:", storedJarvisTokens)
+      console.log("[v0] okta_access_token:", storedAccessToken)
+      console.log("[v0] okta_id_token:", storedIdToken)
 
       let allTokens = {
         token_type: "Bearer",
@@ -91,19 +101,27 @@ export default function JarvisPage() {
         scope: "openid profile email",
       }
 
-      // Load original Okta authentication tokens
       if (storedOktaTokens) {
         const oktaTokens = JSON.parse(storedOktaTokens)
+        console.log("[v0] Parsed okta_tokens:", oktaTokens)
         allTokens = { ...allTokens, ...oktaTokens }
       }
 
-      // Merge with JARVIS-specific tokens (ID-JAG and Todo Access tokens)
+      if (storedAccessToken) {
+        allTokens.access_token = storedAccessToken
+      }
+
+      if (storedIdToken) {
+        allTokens.id_token = storedIdToken
+      }
+
       if (storedJarvisTokens) {
         const jarvisTokens = JSON.parse(storedJarvisTokens)
+        console.log("[v0] Parsed jarvis-tokens:", jarvisTokens)
         allTokens = { ...allTokens, ...jarvisTokens }
       }
 
-      console.log("[v0] JARVIS loaded tokens:", allTokens)
+      console.log("[v0] JARVIS final loaded tokens:", allTokens)
       setTokens(allTokens)
     } catch (error) {
       console.error("Failed to load tokens:", error)
