@@ -23,18 +23,18 @@ export async function POST(request: NextRequest) {
 
     if (isTodoQuery) {
       try {
-        const crossAppToken = await getCrossAppToken(request, "todo0")
+        const crossAppTokens = await getCrossAppToken(request, "todo0")
 
-        if (crossAppToken) {
+        if (crossAppTokens) {
           const tokenData = {
-            id_jag_token: "demo-id-jag-token-" + Date.now(),
-            cross_app_access_token: crossAppToken,
+            id_jag_token: crossAppTokens.id_jag_token,
+            todo_access_token: crossAppTokens.todo_access_token,
           }
 
           // Fetch todo data using cross-app token
           const todoResponse = await fetch(`${request.nextUrl.origin}/api/todo0/todos`, {
             headers: {
-              Authorization: `Bearer ${crossAppToken}`,
+              Authorization: `Bearer ${crossAppTokens.todo_access_token}`,
             },
           })
 
@@ -82,14 +82,20 @@ function formatTodoResponse(todoData: any): string {
   }
 
   const todos = todoData.todos
-  let response = `📋 **Your Todo List** (${todos.length} tasks)\n\n`
+  const incompleteTodos = todos.filter((todo: any) => !todo.completed)
+  const completedCount = todos.filter((t: any) => t.completed).length
 
-  todos.forEach((todo: any, index: number) => {
-    const status = todo.completed ? "✅" : "⏳"
+  if (incompleteTodos.length === 0) {
+    return `🎉 **Congratulations!** You've completed all your tasks!\n\n📊 **Summary:** ${completedCount} tasks completed\n\n✨ *Retrieved via secure OAuth Cross-App Access with ID-JAG tokens!*`
+  }
+
+  let response = `📋 **Your Pending Tasks** (${incompleteTodos.length} remaining)\n\n`
+
+  incompleteTodos.forEach((todo: any, index: number) => {
     const priority = todo.priority ? ` [${todo.priority.toUpperCase()}]` : ""
     const dueDate = todo.due_date ? ` (Due: ${new Date(todo.due_date).toLocaleDateString()})` : ""
 
-    response += `${index + 1}. ${status} ${todo.text}${priority}${dueDate}\n`
+    response += `${index + 1}. ⏳ ${todo.text}${priority}${dueDate}\n`
 
     if (todo.description) {
       response += `   📝 ${todo.description}\n`
@@ -97,10 +103,7 @@ function formatTodoResponse(todoData: any): string {
     response += "\n"
   })
 
-  const completedCount = todos.filter((t: any) => t.completed).length
-  const pendingCount = todos.length - completedCount
-
-  response += `📊 **Summary:** ${completedCount} completed, ${pendingCount} pending\n\n`
+  response += `📊 **Summary:** ${completedCount} completed, ${incompleteTodos.length} pending\n\n`
   response += "✨ *Retrieved via secure OAuth Cross-App Access with ID-JAG tokens!*"
 
   return response
@@ -128,25 +131,42 @@ function generateSimpleResponse(message: string, todoData: any): string {
   return "I'm here to help! Ask me about your todos, tasks, or how the cross-app access works. You can also try: 'What's in my todo list?' or 'Show me my tasks'"
 }
 
-async function getCrossAppToken(request: NextRequest, targetApp: string): Promise<string | null> {
+async function getCrossAppToken(
+  request: NextRequest,
+  targetApp: string,
+): Promise<{ id_jag_token: string; todo_access_token: string } | null> {
   try {
-    // In a real implementation, we'd get this from the user's authenticated session
-    // For now, we'll create a properly formatted demo JWT token
-    const demoIdToken = createDemoIdToken()
+    const cookies = request.headers.get("cookie")
+    let userIdToken = null
+
+    if (cookies) {
+      const tokenMatch = cookies.match(/okta-token=([^;]+)/)
+      if (tokenMatch) {
+        userIdToken = decodeURIComponent(tokenMatch[1])
+      }
+    }
+
+    if (!userIdToken) {
+      console.log("[v0] No real user token found, using demo token")
+      userIdToken = createDemoIdToken()
+    }
 
     const response = await fetch(`${request.nextUrl.origin}/api/agent0/cross-app-access`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${demoIdToken}`,
+        Authorization: `Bearer ${userIdToken}`,
       },
       body: JSON.stringify({ target_app: targetApp }),
     })
 
     if (response.ok) {
       const data = await response.json()
-      console.log("[v0] Obtained cross-app access token for", targetApp)
-      return data.access_token
+      console.log("[v0] Obtained cross-app access tokens for", targetApp)
+      return {
+        id_jag_token: data.id_jag_token || "demo-id-jag-token",
+        todo_access_token: data.access_token,
+      }
     } else {
       console.error("[v0] Failed to get cross-app token:", response.status)
       return null

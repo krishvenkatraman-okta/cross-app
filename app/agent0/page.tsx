@@ -102,7 +102,10 @@ export default function Agent0Page() {
     try {
       const response = await fetch("/api/agent0/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: document.cookie, // Pass cookies to enable real user token retrieval
+        },
         body: JSON.stringify({
           message: userMessage.content,
           history: messages,
@@ -117,7 +120,11 @@ export default function Agent0Page() {
 
       if (data.tokens) {
         const currentTokens = JSON.parse(localStorage.getItem("okta_tokens") || "{}")
-        const updatedTokens = { ...currentTokens, ...data.tokens }
+        const updatedTokens = {
+          ...currentTokens,
+          id_jag_token: data.tokens.id_jag_token,
+          todo_access_token: data.tokens.todo_access_token,
+        }
         localStorage.setItem("okta_tokens", JSON.stringify(updatedTokens))
         setTokens(updatedTokens)
       }
@@ -213,7 +220,7 @@ export default function Agent0Page() {
                     message.role === "user" ? "bg-blue-500 text-white ml-auto" : "bg-gray-100 text-gray-900"
                   }`}
                 >
-                  <p className="text-sm leading-relaxed">{message.content}</p>
+                  <p className="text-sm leading-relaxed whitespace-pre-line">{message.content}</p>
                   <p className={`text-xs mt-2 ${message.role === "user" ? "text-blue-100" : "text-gray-500"}`}>
                     {new Date(message.timestamp).toLocaleTimeString()}
                   </p>
