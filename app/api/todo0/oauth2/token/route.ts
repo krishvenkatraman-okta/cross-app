@@ -65,8 +65,7 @@ async function validateIdJagToken(token: string) {
       return { valid: false }
     }
 
-    // Decode the payload (in production, verify signature first)
-    const payload = JSON.parse(Buffer.from(parts[1], "base64").toString())
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString())
 
     // Validate issuer is the IdP
     if (payload.iss !== process.env.NEXT_PUBLIC_OKTA_ISSUER) {
@@ -113,8 +112,10 @@ async function generateTodo0AccessToken(params: {
     client_id: params.requestingClient,
   }
 
-  // Create Todo0 access token (in production, this would be a signed JWT)
-  const accessToken = `todo0-access.${Buffer.from(JSON.stringify(tokenClaims)).toString("base64")}.signature`
+  const header = { alg: "HS256", typ: "JWT" }
+  const encodedHeader = Buffer.from(JSON.stringify(header)).toString("base64url")
+  const encodedPayload = Buffer.from(JSON.stringify(tokenClaims)).toString("base64url")
+  const accessToken = `${encodedHeader}.${encodedPayload}.demo-signature`
 
   return {
     token: accessToken,

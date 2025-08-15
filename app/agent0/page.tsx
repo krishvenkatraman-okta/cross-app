@@ -19,7 +19,7 @@ interface TokenInfo {
   refresh_token?: string
   id_token?: string
   id_jag_token?: string
-  cross_app_access_token?: string
+  todo_access_token?: string // Renamed from cross_app_access_token to todo_access_token
   token_type: string
   expires_in: number
   scope: string
@@ -271,7 +271,7 @@ export default function Agent0Page() {
               </Button>
             </div>
             <p className="text-xs text-gray-500 mt-2 text-center">
-              Signed in as {user.email} • Agent0 can access your Todo0 data
+              Signed in as {user?.email || "Unknown User"} • Agent0 can access your Todo0 data
             </p>
           </div>
         </div>
@@ -382,13 +382,13 @@ export default function Agent0Page() {
                   </Card>
                 )}
 
-                {/* Cross-App Access Token */}
-                {tokens.cross_app_access_token && (
+                {/* Todo Access Token */}
+                {tokens.todo_access_token && (
                   <Card className="p-4">
                     <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-semibold text-gray-900">Cross-App Access Token</h3>
+                      <h3 className="text-sm font-semibold text-gray-900">Todo Access Token</h3>
                       <Button
-                        onClick={() => copyToClipboard(tokens.cross_app_access_token!)}
+                        onClick={() => copyToClipboard(tokens.todo_access_token!)}
                         variant="ghost"
                         size="sm"
                         className="text-purple-600 hover:text-purple-700 p-1"
@@ -397,7 +397,7 @@ export default function Agent0Page() {
                       </Button>
                     </div>
                     <div className="bg-gray-50 rounded p-3 font-mono text-xs break-all">
-                      {formatToken(tokens.cross_app_access_token)}
+                      {formatToken(tokens.todo_access_token)}
                     </div>
                     <div className="mt-2 text-xs text-gray-500">
                       <div>Type: Bearer Token</div>
@@ -432,19 +432,19 @@ export default function Agent0Page() {
                   <div className="space-y-2 text-xs">
                     <div className="flex justify-between">
                       <span className="text-gray-500">User ID:</span>
-                      <span className="font-mono text-right">{user.id}</span>
+                      <span className="font-mono text-right">{user?.id || "Unknown"}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-500">Email:</span>
-                      <span className="text-right">{user.email}</span>
+                      <span className="text-right">{user?.email || "Unknown"}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-500">Name:</span>
-                      <span className="text-right">{user.name}</span>
+                      <span className="text-right">{user?.name || "Unknown"}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-500">Groups:</span>
-                      <span className="text-right">{user.groups.length > 0 ? user.groups.join(", ") : "None"}</span>
+                      <span className="text-right">{user?.groups?.length > 0 ? user.groups.join(", ") : "None"}</span>
                     </div>
                   </div>
                 </Card>

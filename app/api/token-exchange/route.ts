@@ -121,18 +121,12 @@ async function validateIdToken(token: string) {
       return {
         valid: true,
         app: "agent0", // The requesting app (Agent0)
-        userId: payload.sub || "demo-user",
+        userId: payload.sub || payload.preferred_username || "unknown-user",
         userEmail: payload.email || "user@tables.fake",
       }
     } catch (decodeError) {
       console.error("[v0] Failed to decode ID token payload:", decodeError)
-      // Fallback for demo purposes
-      return {
-        valid: true,
-        app: "agent0",
-        userId: "demo-user",
-        userEmail: "user@tables.fake",
-      }
+      return { valid: false } // Don't fallback to demo data, fail validation instead
     }
   } catch (error) {
     console.error("[v0] ID token validation error:", error)
@@ -174,8 +168,10 @@ async function generateIdJagToken(params: {
     target_client: params.targetApp,
   }
 
-  // Create a demo ID-JAG token (in production, this would be a signed JWT)
-  const idJagToken = `id-jag.${Buffer.from(JSON.stringify(idJagClaims)).toString("base64")}.signature`
+  const header = { alg: "HS256", typ: "JWT" }
+  const encodedHeader = Buffer.from(JSON.stringify(header)).toString("base64url")
+  const encodedPayload = Buffer.from(JSON.stringify(idJagClaims)).toString("base64url")
+  const idJagToken = `${encodedHeader}.${encodedPayload}.demo-signature`
 
   return {
     token: idJagToken,
