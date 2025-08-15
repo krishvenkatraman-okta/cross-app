@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { generateText } from "ai"
 import { createDemoIdToken, formatInventoryResponse } from "./utils"
 
 interface Message {
@@ -14,8 +15,15 @@ export async function POST(request: NextRequest) {
 
     console.log("[v0] JARVIS received message:", message)
 
-    const aiAnalysis = analyzeUserQuerySimple(message)
-    console.log("[v0] Analysis result:", aiAnalysis)
+    let aiAnalysis
+    try {
+      aiAnalysis = await analyzeUserQueryWithAI(message)
+      console.log("[v0] AI analysis result:", aiAnalysis)
+    } catch (error) {
+      console.log("[v0] AI analysis failed, using simple fallback:", error)
+      aiAnalysis = analyzeUserQuerySimple(message)
+      console.log("[v0] Simple analysis result:", aiAnalysis)
+    }
 
     if (aiAnalysis.isInventoryQuery) {
       console.log("[v0] Detected inventory query, attempting cross-app access")
@@ -59,7 +67,13 @@ export async function POST(request: NextRequest) {
                 })) || [],
             })
 
-            const response = generateSimpleInventoryResponse(message, inventoryData, aiAnalysis)
+            let response
+            try {
+              response = await generateInventoryResponseWithAI(message, inventoryData, aiAnalysis)
+            } catch (error) {
+              console.log("[v0] AI response generation failed, using simple fallback:", error)
+              response = generateSimpleInventoryResponse(message, inventoryData, aiAnalysis)
+            }
 
             return NextResponse.json({
               message: response,
@@ -77,7 +91,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const response = generateSimpleGeneralResponse(message)
+    let response
+    try {
+      response = await generateGeneralResponseWithAI(message)
+    } catch (error) {
+      console.log("[v0] AI general response failed, using simple fallback:", error)
+      response = generateSimpleGeneralResponse(message)
+    }
+
     return NextResponse.json({ message: response })
   } catch (error) {
     console.error("[v0] JARVIS chat error:", error)
@@ -93,6 +114,87 @@ export async function POST(request: NextRequest) {
         "I'm here to help! Try asking me about your inventory or warehouse stock. The cross-app access system is working perfectly!",
     })
   }
+}
+
+async function analyzeUserQueryWithAI(message: string): Promise<{
+  isInventoryQuery: boolean
+  warehouse: string
+  queryType: string
+}> {
+  const { text } = await generateText({
+    model: "gpt-4o-mini",
+    system: `You are an AI assistant that analyzes user queries for Atlas Beverages inventory system. 
+    Respond with JSON only, no markdown formatting.
+    
+    Analyze if the query is about inventory/stock and extract warehouse location.
+    Warehouses: texas, california, nevada (default to texas if unclear)
+    
+    Response format:
+    {"isInventoryQuery": boolean, "warehouse": "texas|california|nevada", "queryType": "summary"}`,
+    prompt: `Analyze this user message: "${message}"`,
+  })
+
+  let cleanedText = text.trim()
+  if (cleanedText.startsWith("```json")) {
+    cleanedText = cleanedText.replace(/```json\s*/, "").replace(/```\s*$/, "")
+  }
+  if (cleanedText.startsWith("```")) {
+    cleanedText = cleanedText.replace(/```\s*/, "").replace(/```\s*$/, "")
+  }
+
+  try {
+    return JSON.parse(cleanedText)
+  } catch (error) {
+    console.log("[v0] Failed to parse AI analysis, using fallback")
+    return analyzeUserQuerySimple(message)
+  }
+}
+
+async function generateInventoryResponseWithAI(message: string, inventoryData: any, analysis: any): Promise<string> {
+  const warehouseNames = {
+    texas: "Texas Distribution Center (Dallas)",
+    california: "California Distribution Center (Los Angeles)",
+    nevada: "Nevada Distribution Center (Las Vegas)",
+  }
+
+  const warehouseName = warehouseNames[analysis.warehouse as keyof typeof warehouseNames] || "Texas Distribution Center"
+
+  const { text } = await generateText({
+    model: "gpt-4o-mini",
+    system: `You are JARVIS, Atlas Beverages' AI inventory assistant. Generate a helpful, professional response about inventory data.
+    
+    Use emojis and formatting to make responses engaging. Include:
+    - Clear warehouse identification
+    - Product details with quantities and SKUs
+    - Stock status indicators (✅ In Stock, ⚠️ Low Stock, ❌ Out of Stock)
+    - Key insights about low/out of stock items
+    - Mention that data was retrieved via secure OAuth Cross-App Access
+    
+    Keep responses informative but concise.`,
+    prompt: `User asked: "${message}"
+    
+    Warehouse: ${warehouseName}
+    Inventory data: ${JSON.stringify(inventoryData, null, 2)}
+    
+    Generate a helpful inventory report response.`,
+  })
+
+  return text
+}
+
+async function generateGeneralResponseWithAI(message: string): Promise<string> {
+  const { text } = await generateText({
+    model: "gpt-4o-mini",
+    system: `You are JARVIS, Atlas Beverages' AI inventory assistant. You help with inventory management across Texas, California, and Nevada distribution centers.
+    
+    Be helpful, professional, and mention your OAuth Cross-App Access capabilities.
+    Keep responses concise and suggest specific inventory queries users can try.`,
+    prompt: `User said: "${message}"
+    
+    Generate a helpful response as Atlas Beverages' inventory assistant.`,
+  })
+
+  return text
 }
 
 function analyzeUserQuerySimple(message: string): {
