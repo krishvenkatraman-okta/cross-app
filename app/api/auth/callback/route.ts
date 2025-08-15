@@ -14,10 +14,9 @@ export async function POST(request: NextRequest) {
 
     console.log("[v0] Using client:", { clientId, isAgent0, state })
 
-    const baseUrl = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
-    const redirectUri = `${baseUrl}/callback`
+    const host = request.headers.get("host")
+    const protocol = request.headers.get("x-forwarded-proto") || "https"
+    const redirectUri = `${protocol}://${host}/callback`
 
     console.log("[v0] Token exchange params:", {
       issuer: process.env.NEXT_PUBLIC_OKTA_ISSUER,
