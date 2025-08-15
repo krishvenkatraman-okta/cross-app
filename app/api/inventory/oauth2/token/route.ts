@@ -8,7 +8,7 @@ function validateJwtBearerAssertion(assertion: string): { valid: boolean; user_i
         return {
           valid: true,
           user_id: payload.sub || payload.user_id || "00up6GlznvCobuu31d7",
-          client_id: payload.aud || "jarvis-client",
+          client_id: payload.aud || process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID || "jarvis-client",
         }
       } catch (error) {
         console.log("[v0] Could not decode JWT assertion")
@@ -19,7 +19,7 @@ function validateJwtBearerAssertion(assertion: string): { valid: boolean; user_i
     return {
       valid: true,
       user_id: "00up6GlznvCobuu31d7", // Real Okta user ID
-      client_id: "jarvis-client",
+      client_id: process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID || "jarvis-client",
     }
   } catch (error) {
     return {

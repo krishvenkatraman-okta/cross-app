@@ -77,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else if (currentPath.includes("/admin") || currentPath.includes("/users")) {
         detectedAppType = "agent0"
       } else {
-        detectedAppType = "inventory" // Changed default from todo0 to inventory
+        detectedAppType = "inventory"
       }
     }
 
@@ -91,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       : isAgent0App
         ? process.env.NEXT_PUBLIC_OKTA_AGENT0_CLIENT_ID
         : isInventoryApp
-          ? process.env.NEXT_PUBLIC_OKTA_TODO_CLIENT_ID // Use same client as todo0 for now
+          ? process.env.NEXT_PUBLIC_OKTA_INVENTORY_CLIENT_ID || process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID // Fallback to JARVIS
           : process.env.NEXT_PUBLIC_OKTA_TODO_CLIENT_ID
 
     const state = isJarvisApp ? "jarvis" : isAgent0App ? "agent0" : isInventoryApp ? "inventory" : "todo0"
@@ -100,7 +100,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const redirectUri = `${window.location.origin}/callback`
 
     if (!clientId || !issuer) {
-      console.error("Missing Okta configuration")
+      console.error("Missing Okta configuration", {
+        clientId: clientId ? "present" : "missing",
+        issuer: issuer ? "present" : "missing",
+        appType: detectedAppType,
+        availableEnvVars: {
+          jarvis: process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID ? "present" : "missing",
+          inventory: process.env.NEXT_PUBLIC_OKTA_INVENTORY_CLIENT_ID ? "present" : "missing",
+        },
+      })
       return
     }
 
