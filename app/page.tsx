@@ -36,15 +36,15 @@ export default function HomePage() {
             <CardHeader>
               <CardTitle className="flex items-center">
                 <span className="text-lg mr-2">🤖</span>
-                Agent0 AI Assistant
+                JARVIS AI Assistant
               </CardTitle>
               <CardDescription>
                 AI chatbot with cross-app access to Todo0 data and integrated token viewer
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Link href="/agent0">
-                <Button className="w-full bg-purple-600 hover:bg-purple-700">Chat with Agent0</Button>
+              <Link href="/jarvis">
+                <Button className="w-full bg-purple-600 hover:bg-purple-700">Chat with JARVIS</Button>
               </Link>
             </CardContent>
           </Card>
@@ -65,17 +65,17 @@ export default function HomePage() {
                   <p className="text-green-700">Authenticate with Okta and create some todo tasks</p>
                 </div>
                 <div className="p-4 bg-purple-50 rounded-lg">
-                  <h4 className="font-semibold text-purple-800 mb-2">2. Agent0 AI</h4>
+                  <h4 className="font-semibold text-purple-800 mb-2">2. JARVIS AI</h4>
                   <p className="text-purple-700">Chat with AI assistant that can access your todos</p>
                 </div>
                 <div className="p-4 bg-blue-50 rounded-lg">
                   <h4 className="font-semibold text-blue-800 mb-2">3. Cross-App Access</h4>
-                  <p className="text-blue-700">View tokens in Agent0 sidebar and see secure data sharing in action</p>
+                  <p className="text-blue-700">View tokens in JARVIS sidebar and see secure data sharing in action</p>
                 </div>
               </div>
               <div className="text-center pt-4">
                 <p className="text-gray-600 dark:text-gray-300">
-                  Try asking Agent0: "What's in my todo list?" or "Show me my tasks"
+                  Try asking JARVIS: "What's in my todo list?" or "Show me my tasks"
                 </p>
               </div>
             </CardContent>
