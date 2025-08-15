@@ -1,5 +1,4 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { generateText } from "ai"
 import { createDemoIdToken, formatInventoryResponse } from "./utils"
 
 interface Message {
@@ -15,11 +14,11 @@ export async function POST(request: NextRequest) {
 
     console.log("[v0] JARVIS received message:", message)
 
-    const aiAnalysis = await analyzeUserQuery(message)
-    console.log("[v0] AI analysis result:", aiAnalysis)
+    const aiAnalysis = analyzeUserQuerySimple(message)
+    console.log("[v0] Analysis result:", aiAnalysis)
 
     if (aiAnalysis.isInventoryQuery) {
-      console.log("[v0] AI-detected inventory query, attempting cross-app access")
+      console.log("[v0] Detected inventory query, attempting cross-app access")
 
       try {
         const crossAppTokens = await getCrossAppToken(request, "inventory")
@@ -60,10 +59,10 @@ export async function POST(request: NextRequest) {
                 })) || [],
             })
 
-            const aiResponse = await generateIntelligentResponse(message, inventoryData, aiAnalysis)
+            const response = generateSimpleInventoryResponse(message, inventoryData, aiAnalysis)
 
             return NextResponse.json({
-              message: aiResponse,
+              message: response,
               tokens: tokenData,
             })
           } else {
@@ -71,15 +70,15 @@ export async function POST(request: NextRequest) {
             console.error("[v0] Failed to fetch inventory:", inventoryResponse.status, errorText)
           }
         } else {
-          console.log("[v0] No cross-app token available, using demo data")
+          console.log("[v0] No cross-app token available")
         }
       } catch (error) {
         console.error("[v0] Failed to fetch inventory:", error)
       }
     }
 
-    const aiResponse = await generateGeneralResponse(message, history)
-    return NextResponse.json({ message: aiResponse })
+    const response = generateSimpleGeneralResponse(message)
+    return NextResponse.json({ message: response })
   } catch (error) {
     console.error("[v0] JARVIS chat error:", error)
 
@@ -96,107 +95,95 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function analyzeUserQuery(message: string): Promise<{
+function analyzeUserQuerySimple(message: string): {
   isInventoryQuery: boolean
   warehouse: string
   queryType: string
-}> {
-  try {
-    const { text } = await generateText({
-      model: "gpt-4o-mini",
-      system: `You are an AI assistant that analyzes user queries for an Atlas Beverages inventory management system. 
-      
-      Analyze the user's message and respond with a JSON object containing:
-      - isInventoryQuery: boolean (true if asking about inventory, stock, products, warehouses)
-      - warehouse: string (texas, california, or nevada - default to texas if not specified)
-      - queryType: string (summary, specific_product, stock_levels, or general)
-      
-      Warehouses: Texas (Dallas), California (Los Angeles), Nevada (Las Vegas)
-      
-      Examples:
-      "What's in my Texas warehouse?" -> {"isInventoryQuery": true, "warehouse": "texas", "queryType": "summary"}
-      "Show me Pepsi stock in California" -> {"isInventoryQuery": true, "warehouse": "california", "queryType": "specific_product"}
-      "Hello" -> {"isInventoryQuery": false, "warehouse": "texas", "queryType": "general"}`,
-      prompt: `Analyze this user message: "${message}"`,
-    })
+} {
+  const lowerMessage = message.toLowerCase()
 
-    return JSON.parse(text)
-  } catch (error) {
-    console.error("[v0] AI query analysis failed:", error)
-    // Fallback to simple detection
-    return {
-      isInventoryQuery:
-        message.toLowerCase().includes("inventory") ||
-        message.toLowerCase().includes("stock") ||
-        message.toLowerCase().includes("warehouse"),
-      warehouse: extractWarehouse(message),
-      queryType: "general",
+  const isInventoryQuery =
+    lowerMessage.includes("inventory") ||
+    lowerMessage.includes("stock") ||
+    lowerMessage.includes("warehouse") ||
+    lowerMessage.includes("texas") ||
+    lowerMessage.includes("california") ||
+    lowerMessage.includes("nevada") ||
+    lowerMessage.includes("show me") ||
+    lowerMessage.includes("what") ||
+    lowerMessage.includes("list")
+
+  return {
+    isInventoryQuery,
+    warehouse: extractWarehouse(message),
+    queryType: "summary",
+  }
+}
+
+function generateSimpleInventoryResponse(message: string, inventoryData: any, analysis: any): string {
+  const warehouseNames = {
+    texas: "Texas Distribution Center (Dallas)",
+    california: "California Distribution Center (Los Angeles)",
+    nevada: "Nevada Distribution Center (Las Vegas)",
+  }
+
+  const warehouseName = warehouseNames[analysis.warehouse as keyof typeof warehouseNames] || "Texas Distribution Center"
+
+  if (!inventoryData?.items || inventoryData.items.length === 0) {
+    return `I don't have any inventory data available for the ${warehouseName} right now. Please check back later or contact your system administrator.`
+  }
+
+  let response = `📦 **Current Inventory for ${warehouseName}**\n\n`
+
+  const categories: { [key: string]: any[] } = {}
+  inventoryData.items.forEach((item: any) => {
+    if (!categories[item.category]) {
+      categories[item.category] = []
     }
+    categories[item.category].push(item)
+  })
+
+  Object.entries(categories).forEach(([category, items]) => {
+    response += `**${category}:**\n`
+    items.forEach((item: any) => {
+      const stockStatus = item.quantity === 0 ? "❌ Out of Stock" : item.quantity < 1000 ? "⚠️ Low Stock" : "✅ In Stock"
+      response += `• ${item.name}: ${item.quantity.toLocaleString()} units (${item.sku}) - ${stockStatus}\n`
+    })
+    response += "\n"
+  })
+
+  const lowStockItems = inventoryData.items.filter((item: any) => item.quantity > 0 && item.quantity < 1000)
+  const outOfStockItems = inventoryData.items.filter((item: any) => item.quantity === 0)
+
+  if (lowStockItems.length > 0 || outOfStockItems.length > 0) {
+    response += "📊 **Key Insights:**\n"
+    if (outOfStockItems.length > 0) {
+      response += `• ${outOfStockItems.length} item(s) are out of stock\n`
+    }
+    if (lowStockItems.length > 0) {
+      response += `• ${lowStockItems.length} item(s) have low stock levels\n`
+    }
+    response += "\n"
   }
+
+  response +=
+    "✨ *This data was retrieved via secure OAuth Cross-App Access. If you need further assistance or more detailed reports, feel free to ask!*"
+
+  return response
 }
 
-async function generateIntelligentResponse(message: string, inventoryData: any, analysis: any): Promise<string> {
-  try {
-    const inventoryContext =
-      inventoryData?.items
-        ?.map((item: any) => `${item.name}: ${item.quantity} units (${item.category}, SKU: ${item.sku})`)
-        .join("\n") || "No inventory data available"
+function generateSimpleGeneralResponse(message: string): string {
+  const lowerMessage = message.toLowerCase()
 
-    const { text } = await generateText({
-      model: "gpt-4o-mini",
-      system: `You are JARVIS, Atlas Beverages' AI inventory assistant. You have access to real-time warehouse data via secure OAuth cross-app access.
-
-      Guidelines:
-      - Be professional but friendly
-      - Provide specific, actionable insights
-      - Highlight stock issues (out of stock, low stock)
-      - Use relevant emojis sparingly
-      - Always mention that data was retrieved via secure OAuth Cross-App Access
-      - Focus on the requested warehouse: ${analysis.warehouse}
-      
-      Warehouse locations:
-      - Texas: Dallas Distribution Center
-      - California: Los Angeles Distribution Center  
-      - Nevada: Las Vegas Distribution Center`,
-      prompt: `User asked: "${message}"
-      
-      Current inventory data for ${analysis.warehouse} warehouse:
-      ${inventoryContext}
-      
-      Provide a helpful response about their inventory.`,
-    })
-
-    return text
-  } catch (error) {
-    console.error("[v0] AI response generation failed:", error)
-    // Fallback to formatted response
-    return formatInventoryResponse(inventoryData, analysis.warehouse)
+  if (lowerMessage.includes("hello") || lowerMessage.includes("hi")) {
+    return "Hello! I'm JARVIS, your Atlas Beverages inventory assistant. I can help you check warehouse stock levels across our Texas, California, and Nevada distribution centers. Try asking me 'What's in my Texas inventory?' or 'Show me California warehouse stock'."
   }
-}
 
-async function generateGeneralResponse(message: string, history: Message[] = []): Promise<string> {
-  try {
-    const conversationHistory = history.map((msg) => `${msg.role}: ${msg.content}`).join("\n")
-
-    const { text } = await generateText({
-      model: "gpt-4o-mini",
-      system: `You are JARVIS, Atlas Beverages' AI inventory assistant. You help users manage warehouse inventory across Texas, California, and Nevada distribution centers.
-
-      Capabilities:
-      - Real-time inventory queries via secure OAuth Cross-App Access
-      - Stock level monitoring and alerts
-      - Warehouse-specific data retrieval
-      - Product and SKU information
-      
-      Be helpful, professional, and guide users toward inventory-related tasks.`,
-      prompt: `${conversationHistory ? `Previous conversation:\n${conversationHistory}\n\n` : ""}User: ${message}`,
-    })
-
-    return text
-  } catch (error) {
-    console.error("[v0] AI general response failed:", error)
-    return "I'm here to help with your Atlas Beverages inventory! Ask me about warehouse stock levels, product quantities, or specific locations like Texas, California, or Nevada."
+  if (lowerMessage.includes("help")) {
+    return "I can help you with:\n• Checking inventory levels by warehouse\n• Viewing stock status and quantities\n• Getting product information and SKUs\n• Monitoring low stock alerts\n\nTry asking: 'Show me Texas inventory' or 'What's the stock in California?'"
   }
+
+  return "I'm here to help with your Atlas Beverages inventory! Ask me about warehouse stock levels, product quantities, or specific locations like Texas, California, or Nevada. I use secure OAuth Cross-App Access to get real-time data."
 }
 
 function extractWarehouse(message: string): string {
