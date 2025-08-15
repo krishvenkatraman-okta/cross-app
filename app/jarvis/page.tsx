@@ -26,6 +26,7 @@ interface TokenInfo {
 
 function TokenCard({ title, token, type, usage }: { title: string; token: string; type: string; usage: string }) {
   const [copied, setCopied] = useState(false)
+  const [expanded, setExpanded] = useState(false)
 
   const copyToken = () => {
     navigator.clipboard.writeText(token)
@@ -33,19 +34,26 @@ function TokenCard({ title, token, type, usage }: { title: string; token: string
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const toggleExpanded = () => {
+    setExpanded(!expanded)
+  }
+
   return (
     <Card className="p-4 border border-gray-200">
       <div className="flex items-center justify-between mb-2">
         <h3 className="font-semibold text-gray-900">{title}</h3>
-        <Button onClick={copyToken} variant="ghost" size="sm" className="text-purple-600 hover:text-purple-700">
-          {copied ? "✓" : "📋"}
-        </Button>
+        <div className="flex gap-1">
+          <Button onClick={toggleExpanded} variant="ghost" size="sm" className="text-purple-600 hover:text-purple-700">
+            {expanded ? "👁" : "👁‍🗨"}
+          </Button>
+          <Button onClick={copyToken} variant="ghost" size="sm" className="text-purple-600 hover:text-purple-700">
+            {copied ? "✓" : "📋"}
+          </Button>
+        </div>
       </div>
 
       <div className="bg-gray-50 rounded p-3 mb-3">
-        <code className="text-xs text-gray-700 break-all">
-          {token.length > 50 ? `${token.substring(0, 50)}...` : token}
-        </code>
+        <code className="text-xs text-gray-700 break-all">{expanded ? token : `${token.substring(0, 50)}...`}</code>
       </div>
 
       <div className="text-xs text-gray-500">
@@ -74,13 +82,8 @@ export default function JarvisPage() {
   const loadTokens = async () => {
     setIsLoadingTokens(true)
     try {
-      // Load from localStorage first
-      const storedTokens = localStorage.getItem("jarvis-tokens")
-      if (storedTokens) {
-        setTokens(JSON.parse(storedTokens))
-      }
-
-      // Also load from auth storage
+      // Load all tokens from localStorage
+      const storedJarvisTokens = localStorage.getItem("jarvis-tokens")
       const authTokens = {
         access_token: localStorage.getItem("okta-token") || "",
         id_token: localStorage.getItem("okta-id-token") || "",
@@ -90,9 +93,16 @@ export default function JarvisPage() {
         scope: "openid profile email",
       }
 
-      if (authTokens.access_token) {
-        setTokens((prev) => ({ ...authTokens, ...prev }))
+      let allTokens = { ...authTokens }
+
+      // Merge with JARVIS-specific tokens (ID-JAG and Todo Access tokens)
+      if (storedJarvisTokens) {
+        const jarvisTokens = JSON.parse(storedJarvisTokens)
+        allTokens = { ...allTokens, ...jarvisTokens }
       }
+
+      console.log("[v0] JARVIS loaded tokens:", allTokens)
+      setTokens(allTokens)
     } catch (error) {
       console.error("Failed to load tokens:", error)
     } finally {
