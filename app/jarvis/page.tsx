@@ -87,34 +87,24 @@ export default function JarvisPage() {
 
       const storedOktaTokens = localStorage.getItem("okta_tokens")
       const storedJarvisTokens = localStorage.getItem("jarvis-tokens")
-      const storedAccessToken = localStorage.getItem("okta_access_token")
-      const storedIdToken = localStorage.getItem("okta_id_token")
 
       console.log("[v0] okta_tokens:", storedOktaTokens)
       console.log("[v0] jarvis-tokens:", storedJarvisTokens)
-      console.log("[v0] okta_access_token:", storedAccessToken)
-      console.log("[v0] okta_id_token:", storedIdToken)
 
-      let allTokens = {
+      let allTokens: any = {
         token_type: "Bearer",
         expires_in: 3600,
         scope: "openid profile email",
       }
 
+      // Load original Okta tokens from callback
       if (storedOktaTokens) {
         const oktaTokens = JSON.parse(storedOktaTokens)
         console.log("[v0] Parsed okta_tokens:", oktaTokens)
         allTokens = { ...allTokens, ...oktaTokens }
       }
 
-      if (storedAccessToken) {
-        allTokens.access_token = storedAccessToken
-      }
-
-      if (storedIdToken) {
-        allTokens.id_token = storedIdToken
-      }
-
+      // Load JARVIS-specific cross-app tokens
       if (storedJarvisTokens) {
         const jarvisTokens = JSON.parse(storedJarvisTokens)
         console.log("[v0] Parsed jarvis-tokens:", jarvisTokens)

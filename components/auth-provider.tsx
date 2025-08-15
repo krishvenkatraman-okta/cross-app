@@ -66,7 +66,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!detectedAppType) {
       const currentPath = window.location.pathname
-      if (currentPath.includes("/todo0")) {
+      if (currentPath.includes("/inventory")) {
+        detectedAppType = "inventory"
+      } else if (currentPath.includes("/todo0")) {
         detectedAppType = "todo0"
       } else if (currentPath.includes("/jarvis")) {
         detectedAppType = "jarvis"
@@ -75,21 +77,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else if (currentPath.includes("/admin") || currentPath.includes("/users")) {
         detectedAppType = "agent0"
       } else {
-        detectedAppType = "todo0" // default to todo0
+        detectedAppType = "inventory" // Changed default from todo0 to inventory
       }
     }
 
     const isJarvisApp = detectedAppType === "jarvis"
     const isAgent0App = detectedAppType === "agent0" || isJarvisApp
+    const isInventoryApp = detectedAppType === "inventory"
     const isTodo0App = detectedAppType === "todo0"
 
     const clientId = isJarvisApp
       ? process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
       : isAgent0App
         ? process.env.NEXT_PUBLIC_OKTA_AGENT0_CLIENT_ID
-        : process.env.NEXT_PUBLIC_OKTA_TODO_CLIENT_ID
+        : isInventoryApp
+          ? process.env.NEXT_PUBLIC_OKTA_TODO_CLIENT_ID // Use same client as todo0 for now
+          : process.env.NEXT_PUBLIC_OKTA_TODO_CLIENT_ID
 
-    const state = isJarvisApp ? "jarvis" : isAgent0App ? "agent0" : "todo0"
+    const state = isJarvisApp ? "jarvis" : isAgent0App ? "agent0" : isInventoryApp ? "inventory" : "todo0"
 
     const issuer = process.env.NEXT_PUBLIC_OKTA_ISSUER
     const redirectUri = `${window.location.origin}/callback`

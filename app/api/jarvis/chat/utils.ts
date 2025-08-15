@@ -46,3 +46,59 @@ export function formatTodoResponse(todoData: any): string {
 
   return response
 }
+
+export function formatInventoryResponse(inventoryData: any, requestedWarehouse?: string): string {
+  if (!inventoryData || !inventoryData.items || inventoryData.items.length === 0) {
+    const warehouseName = getWarehouseName(requestedWarehouse || "texas")
+    return `No inventory items found in ${warehouseName}! Head over to Atlas Beverages Inventory to add some products.`
+  }
+
+  const warehouse = inventoryData.warehouse || requestedWarehouse || "texas"
+  const warehouseName = getWarehouseName(warehouse)
+  const items = inventoryData.items
+
+  // Group items by category
+  const categories = items.reduce((acc: any, item: any) => {
+    if (!acc[item.category]) {
+      acc[item.category] = []
+    }
+    acc[item.category].push(item)
+    return acc
+  }, {})
+
+  let response = `📦 **${warehouseName} Inventory** (${items.length} products)\n\n`
+
+  // Display items by category
+  Object.keys(categories).forEach((category) => {
+    response += `**${category}:**\n`
+    categories[category].forEach((item: any) => {
+      const stockStatus = item.quantity === 0 ? "🔴" : item.quantity < 10 ? "🟡" : "🟢"
+      response += `  ${stockStatus} ${item.name} - ${item.quantity} units (SKU: ${item.sku})\n`
+    })
+    response += `\n`
+  })
+
+  // Calculate totals
+  const totalItems = items.length
+  const outOfStock = items.filter((item: any) => item.quantity === 0).length
+  const lowStock = items.filter((item: any) => item.quantity > 0 && item.quantity < 10).length
+  const inStock = items.filter((item: any) => item.quantity >= 10).length
+
+  response += `📊 **Stock Summary:**\n`
+  response += `  🟢 In Stock: ${inStock} products\n`
+  response += `  🟡 Low Stock: ${lowStock} products\n`
+  response += `  🔴 Out of Stock: ${outOfStock} products\n\n`
+
+  response += `✨ *Retrieved via secure OAuth Cross-App Access with ID-JAG tokens!*`
+
+  return response
+}
+
+function getWarehouseName(warehouse: string): string {
+  const warehouseNames = {
+    texas: "Texas Distribution Center (Dallas, TX)",
+    california: "California Distribution Center (Los Angeles, CA)",
+    nevada: "Nevada Distribution Center (Las Vegas, NV)",
+  }
+  return warehouseNames[warehouse as keyof typeof warehouseNames] || "Unknown Warehouse"
+}

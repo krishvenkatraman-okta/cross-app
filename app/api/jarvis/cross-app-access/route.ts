@@ -13,6 +13,8 @@ export async function POST(request: NextRequest) {
 
     const idToken = authHeader.substring(7)
 
+    const audienceUrl = target_app === "inventory" ? "https://auth.inventory.com/" : `https://auth.${target_app}.com/`
+
     const idJagResponse = await fetch(`${request.nextUrl.origin}/api/token-exchange`, {
       method: "POST",
       headers: {
@@ -21,7 +23,7 @@ export async function POST(request: NextRequest) {
       body: new URLSearchParams({
         grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
         requested_token_type: "urn:ietf:params:oauth:token-type:id-jag",
-        audience: `https://auth.${target_app}.com/`,
+        audience: audienceUrl,
         subject_token: idToken,
         subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
         client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
@@ -38,7 +40,12 @@ export async function POST(request: NextRequest) {
     const idJagToken = await idJagResponse.json()
     console.log("[v0] ID-JAG token obtained")
 
-    const accessTokenResponse = await fetch(`${request.nextUrl.origin}/api/${target_app}/oauth2/token`, {
+    const tokenEndpoint =
+      target_app === "inventory"
+        ? `${request.nextUrl.origin}/api/inventory/oauth2/token`
+        : `${request.nextUrl.origin}/api/${target_app}/oauth2/token`
+
+    const accessTokenResponse = await fetch(tokenEndpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -64,14 +71,27 @@ export async function POST(request: NextRequest) {
       scope: accessToken.scope,
     })
 
-    return NextResponse.json({
-      access_token: accessToken.access_token,
-      id_jag_token: idJagToken.access_token,
-      token_type: accessToken.token_type,
-      expires_in: accessToken.expires_in,
-      scope: accessToken.scope,
-      target_app,
-    })
+    const responseTokens =
+      target_app === "inventory"
+        ? {
+            access_token: accessToken.access_token,
+            inventory_access_token: accessToken.access_token,
+            id_jag_token: idJagToken.access_token,
+            token_type: accessToken.token_type,
+            expires_in: accessToken.expires_in,
+            scope: accessToken.scope,
+            target_app,
+          }
+        : {
+            access_token: accessToken.access_token,
+            id_jag_token: idJagToken.access_token,
+            token_type: accessToken.token_type,
+            expires_in: accessToken.expires_in,
+            scope: accessToken.scope,
+            target_app,
+          }
+
+    return NextResponse.json(responseTokens)
   } catch (error) {
     console.error("[v0] Cross-app access error:", error)
     return NextResponse.json({ error: "Failed to obtain cross-app access" }, { status: 500 })

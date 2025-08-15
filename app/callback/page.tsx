@@ -54,6 +54,8 @@ export default function CallbackPage() {
           redirectPath = "/jarvis"
         } else if (state === "agent0" || state === "admin") {
           redirectPath = "/agent0"
+        } else if (state === "inventory") {
+          redirectPath = "/inventory"
         } else if (state === "todo0" || state === "todo") {
           redirectPath = "/todo0"
         }
