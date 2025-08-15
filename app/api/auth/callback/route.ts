@@ -18,25 +18,39 @@ export async function POST(request: NextRequest) {
     const protocol = request.headers.get("x-forwarded-proto") || "https"
     const redirectUri = `${protocol}://${host}/callback`
 
-    console.log("[v0] Token exchange params:", {
+    const tokenEndpoint = `${process.env.NEXT_PUBLIC_OKTA_ISSUER}/oauth2/default/v1/token`
+    const authHeader = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`
+
+    console.log("[v0] Token exchange details:", {
       issuer: process.env.NEXT_PUBLIC_OKTA_ISSUER,
+      tokenEndpoint,
       redirectUri,
       clientId,
+      clientSecretLength: clientSecret?.length,
+      authHeaderLength: authHeader.length,
+      host,
+      protocol,
     })
 
+    const tokenBody = new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: redirectUri,
+    })
+
+    console.log("[v0] Token request body:", tokenBody.toString())
+
     // Exchange authorization code for tokens
-    const tokenResponse = await fetch(`${process.env.NEXT_PUBLIC_OKTA_ISSUER}/oauth2/default/v1/token`, {
+    const tokenResponse = await fetch(tokenEndpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
+        Authorization: authHeader,
       },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: redirectUri,
-      }),
+      body: tokenBody,
     })
+
+    console.log("[v0] Token response status:", tokenResponse.status, tokenResponse.statusText)
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text()
@@ -44,6 +58,7 @@ export async function POST(request: NextRequest) {
         status: tokenResponse.status,
         statusText: tokenResponse.statusText,
         error: errorText,
+        headers: Object.fromEntries(tokenResponse.headers.entries()),
       })
       throw new Error(`Token exchange failed: ${tokenResponse.status} ${errorText}`)
     }
