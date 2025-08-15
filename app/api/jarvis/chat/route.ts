@@ -310,8 +310,9 @@ async function getCrossAppToken(
     const cookies = request.headers.get("cookie")
     let userIdToken = null
 
-    console.log("[v0] Checking for user token in cookies...")
+    console.log("[v0] Checking for user token in cookies and localStorage...")
 
+    // First check cookies (for server-side requests)
     if (cookies) {
       const oktaTokenMatch = cookies.match(/okta-token=([^;]+)/)
       const oktaTokensMatch = cookies.match(/okta_tokens=([^;]+)/)
@@ -319,14 +320,25 @@ async function getCrossAppToken(
 
       if (oktaTokenMatch) {
         userIdToken = decodeURIComponent(oktaTokenMatch[1])
-        console.log("[v0] Found okta-token:", userIdToken?.substring(0, 20) + "...")
+        console.log("[v0] Found okta-token in cookies:", userIdToken?.substring(0, 20) + "...")
       } else if (oktaTokensMatch) {
         const tokensData = JSON.parse(decodeURIComponent(oktaTokensMatch[1]))
         userIdToken = tokensData.id_token || tokensData.access_token
-        console.log("[v0] Found okta_tokens, using id_token:", userIdToken?.substring(0, 20) + "...")
+        console.log("[v0] Found okta_tokens in cookies, using id_token:", userIdToken?.substring(0, 20) + "...")
       } else if (accessTokenMatch) {
         userIdToken = decodeURIComponent(accessTokenMatch[1])
-        console.log("[v0] Found okta_access_token:", userIdToken?.substring(0, 20) + "...")
+        console.log("[v0] Found okta_access_token in cookies:", userIdToken?.substring(0, 20) + "...")
+      }
+    }
+
+    // If not found in cookies, check if we can get it from the request body or headers
+    // (since localStorage is client-side only, we need the client to send it)
+    if (!userIdToken) {
+      // Try to get from Authorization header (if client sends it)
+      const authHeader = request.headers.get("authorization")
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        userIdToken = authHeader.substring(7)
+        console.log("[v0] Found token in Authorization header:", userIdToken?.substring(0, 20) + "...")
       }
     }
 

@@ -156,12 +156,26 @@ export default function JarvisPage() {
     try {
       console.log("[v0] JARVIS sending message:", userMessage.content)
 
+      const storedOktaTokens = localStorage.getItem("okta_tokens")
+      const authHeaders: any = {
+        "Content-Type": "application/json",
+        Cookie: document.cookie,
+      }
+
+      if (storedOktaTokens) {
+        const oktaTokens = JSON.parse(storedOktaTokens)
+        if (oktaTokens.id_token) {
+          authHeaders.Authorization = `Bearer ${oktaTokens.id_token}`
+          console.log(
+            "[v0] JARVIS sending ID token in Authorization header:",
+            oktaTokens.id_token.substring(0, 20) + "...",
+          )
+        }
+      }
+
       const response = await fetch("/api/jarvis/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Cookie: document.cookie,
-        },
+        headers: authHeaders,
         body: JSON.stringify({
           message: userMessage.content,
           history: messages,

@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
 import crypto from "crypto"
-import { crossAppConfig } from "@/lib/okta-config"
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,6 +18,7 @@ export async function POST(request: NextRequest) {
     console.log("[v0] ID token starts with:", idToken.substring(0, 50) + "...")
 
     // Decode and validate the ID token structure
+    let tokenPayload: any
     try {
       const tokenParts = idToken.split(".")
       if (tokenParts.length !== 3) {
@@ -27,33 +27,39 @@ export async function POST(request: NextRequest) {
       }
 
       const header = JSON.parse(Buffer.from(tokenParts[0], "base64url").toString())
-      const payload = JSON.parse(Buffer.from(tokenParts[1], "base64url").toString())
+      tokenPayload = JSON.parse(Buffer.from(tokenParts[1], "base64url").toString())
 
       console.log("[v0] ID token header:", header)
       console.log("[v0] ID token payload:", {
-        iss: payload.iss,
-        aud: payload.aud,
-        sub: payload.sub,
-        exp: payload.exp,
-        iat: payload.iat,
-        expired: payload.exp < Math.floor(Date.now() / 1000),
+        iss: tokenPayload.iss,
+        aud: tokenPayload.aud,
+        sub: tokenPayload.sub,
+        exp: tokenPayload.exp,
+        iat: tokenPayload.iat,
+        expired: tokenPayload.exp < Math.floor(Date.now() / 1000),
       })
 
       // Check if token is expired
-      if (payload.exp < Math.floor(Date.now() / 1000)) {
+      if (tokenPayload.exp < Math.floor(Date.now() / 1000)) {
         console.error("[v0] ID token is expired")
         return NextResponse.json({ error: "ID token is expired" }, { status: 400 })
       }
 
       // Verify issuer matches expected Okta domain
-      if (!payload.iss || !payload.iss.includes("okta.com")) {
-        console.error("[v0] ID token issuer is not from Okta:", payload.iss)
+      if (!tokenPayload.iss || !tokenPayload.iss.includes("okta.com")) {
+        console.error("[v0] ID token issuer is not from Okta:", tokenPayload.iss)
         return NextResponse.json({ error: "Invalid ID token issuer" }, { status: 400 })
       }
     } catch (decodeError) {
       console.error("[v0] Failed to decode ID token:", decodeError)
       return NextResponse.json({ error: "Failed to decode ID token" }, { status: 400 })
     }
+
+    const oktaDomain = tokenPayload.iss.replace("/oauth2/default", "").replace("/oauth2", "")
+    const dynamicTokenEndpoint = `${oktaDomain}/oauth2/v1/token`
+
+    console.log("[v0] Extracted Okta domain from ID token:", oktaDomain)
+    console.log("[v0] Using dynamic token endpoint:", dynamicTokenEndpoint)
 
     const audienceUrl = target_app === "inventory" ? "https://auth.inventory.com/" : `https://auth.${target_app}.com/`
 
@@ -62,9 +68,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing Okta client ID configuration" }, { status: 500 })
     }
 
-    const clientAssertion = await generateClientAssertion(clientId, crossAppConfig.tokenExchangeEndpoint)
+    const clientAssertion = await generateClientAssertion(clientId, dynamicTokenEndpoint)
 
-    console.log("[v0] Making ID-JAG token exchange request to Okta:", crossAppConfig.tokenExchangeEndpoint)
+    console.log("[v0] Making ID-JAG token exchange request to Okta:", dynamicTokenEndpoint)
     console.log("[v0] Using client ID:", clientId)
     console.log("[v0] Token exchange parameters:", {
       grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
@@ -74,7 +80,7 @@ export async function POST(request: NextRequest) {
       subject_token_length: idToken.length,
     })
 
-    const idJagResponse = await fetch(crossAppConfig.tokenExchangeEndpoint, {
+    const idJagResponse = await fetch(dynamicTokenEndpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
