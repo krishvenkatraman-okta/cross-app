@@ -82,18 +82,20 @@ export default function JarvisPage() {
   const loadTokens = async () => {
     setIsLoadingTokens(true)
     try {
-      // Load all tokens from localStorage
+      const storedOktaTokens = localStorage.getItem("okta_tokens")
       const storedJarvisTokens = localStorage.getItem("jarvis-tokens")
-      const authTokens = {
-        access_token: localStorage.getItem("okta-token") || "",
-        id_token: localStorage.getItem("okta-id-token") || "",
-        refresh_token: localStorage.getItem("okta-refresh-token") || "",
+
+      let allTokens = {
         token_type: "Bearer",
         expires_in: 3600,
         scope: "openid profile email",
       }
 
-      let allTokens = { ...authTokens }
+      // Load original Okta authentication tokens
+      if (storedOktaTokens) {
+        const oktaTokens = JSON.parse(storedOktaTokens)
+        allTokens = { ...allTokens, ...oktaTokens }
+      }
 
       // Merge with JARVIS-specific tokens (ID-JAG and Todo Access tokens)
       if (storedJarvisTokens) {
