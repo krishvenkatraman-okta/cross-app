@@ -63,9 +63,9 @@ export async function POST(request: NextRequest) {
 
     const audienceUrl = target_app === "inventory" ? "https://auth.inventory.com/" : `https://auth.${target_app}.com/`
 
-    const clientId = tokenPayload.aud
+    const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
     if (!clientId) {
-      return NextResponse.json({ error: "Missing client ID from ID token audience" }, { status: 500 })
+      return NextResponse.json({ error: "Missing JARVIS client ID configuration" }, { status: 500 })
     }
 
     const clientAssertion = await generateClientAssertion(clientId, dynamicTokenEndpoint)
@@ -193,7 +193,9 @@ async function generateClientAssertion(clientId: string, audience: string) {
   const encodedHeader = Buffer.from(JSON.stringify(header)).toString("base64url")
   const encodedPayload = Buffer.from(JSON.stringify(claims)).toString("base64url")
 
-  const secret = process.env.OKTA_JARVIS_CLIENT_SECRET || "demo-jwt-secret-key-for-client-assertions"
+  const secret = process.env.OKTA_JARVIS_CLIENT_SECRET || "demo-jarvis-secret"
+  console.log("[v0] Using JARVIS client secret for client assertion")
+
   const signature = crypto.createHmac("sha256", secret).update(`${encodedHeader}.${encodedPayload}`).digest("base64url")
 
   return `${encodedHeader}.${encodedPayload}.${signature}`
