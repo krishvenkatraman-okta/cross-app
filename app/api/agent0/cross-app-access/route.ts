@@ -6,48 +6,70 @@ export async function POST(request: NextRequest) {
 
     console.log("[v0] Cross-app access request for:", target_app)
 
-    // Get the current user's token from the request
+    // Get the current user's ID token from the request
     const authHeader = request.headers.get("authorization")
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json({ error: "Missing or invalid authorization header" }, { status: 401 })
     }
 
-    const currentToken = authHeader.substring(7)
+    const idToken = authHeader.substring(7)
 
-    // Request a cross-app token via token exchange
-    const tokenExchangeResponse = await fetch(`${request.nextUrl.origin}/api/token-exchange`, {
+    const idJagResponse = await fetch(`${request.nextUrl.origin}/api/token-exchange`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
-        subject_token: currentToken,
-        subject_token_type: "urn:ietf:params:oauth:token-type:access_token",
-        audience: `${target_app}-api`,
-        requested_token_type: "urn:ietf:params:oauth:token-type:access_token",
+        requested_token_type: "urn:ietf:params:oauth:token-type:id-jag",
+        audience: `https://auth.${target_app}.com/`,
+        subject_token: idToken,
+        subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
+        client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+        client_assertion: "demo-client-assertion", // In production, this would be a proper JWT
       }),
     })
 
-    if (!tokenExchangeResponse.ok) {
-      const error = await tokenExchangeResponse.json()
-      console.error("[v0] Token exchange failed:", error)
-      return NextResponse.json({ error: "Token exchange failed", details: error }, { status: 400 })
+    if (!idJagResponse.ok) {
+      const error = await idJagResponse.json()
+      console.error("[v0] ID-JAG exchange failed:", error)
+      return NextResponse.json({ error: "ID-JAG exchange failed", details: error }, { status: 400 })
     }
 
-    const exchangedToken = await tokenExchangeResponse.json()
+    const idJagToken = await idJagResponse.json()
+    console.log("[v0] ID-JAG token obtained")
 
-    console.log("[v0] Cross-app token obtained:", {
-      tokenType: exchangedToken.token_type,
-      expiresIn: exchangedToken.expires_in,
-      scope: exchangedToken.scope,
+    const accessTokenResponse = await fetch(`${request.nextUrl.origin}/api/${target_app}/oauth2/token`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: "Basic " + Buffer.from("agent0-client:agent0-secret").toString("base64"),
+      },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        assertion: idJagToken.access_token, // This is actually the ID-JAG token
+      }),
+    })
+
+    if (!accessTokenResponse.ok) {
+      const error = await accessTokenResponse.json()
+      console.error("[v0] Access token request failed:", error)
+      return NextResponse.json({ error: "Access token request failed", details: error }, { status: 400 })
+    }
+
+    const accessToken = await accessTokenResponse.json()
+
+    console.log("[v0] Cross-app access token obtained:", {
+      tokenType: accessToken.token_type,
+      expiresIn: accessToken.expires_in,
+      scope: accessToken.scope,
     })
 
     return NextResponse.json({
-      access_token: exchangedToken.access_token,
-      token_type: exchangedToken.token_type,
-      expires_in: exchangedToken.expires_in,
-      scope: exchangedToken.scope,
+      access_token: accessToken.access_token,
+      token_type: accessToken.token_type,
+      expires_in: accessToken.expires_in,
+      scope: accessToken.scope,
       target_app,
     })
   } catch (error) {

@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     let systemPrompt = `You are Agent0, a helpful AI assistant that can access the user's todo data from their Todo0 application. 
     You are friendly, concise, and helpful. When users ask about their todos or tasks, you can provide specific information.
     
-    You have cross-app access to the user's Todo0 data through secure token exchange.`
+    You have cross-app access to the user's Todo0 data through secure OAuth Cross-App Access with ID-JAG tokens.`
 
     if (todoData && todoData.todos) {
       systemPrompt += `\n\nCurrent user todos:
@@ -86,22 +86,22 @@ ${todoData.todos.map((todo: any) => `- ${todo.text} ${todo.completed ? "(complet
 
 async function getCrossAppToken(request: NextRequest, targetApp: string): Promise<string | null> {
   try {
-    // In a real implementation, we'd get the user's current token from the session
-    // For demo purposes, we'll simulate having an Agent0 token
-    const agentToken = "demo-agent0-token"
+    // In a real implementation, we'd get the user's ID token from the session
+    // For demo purposes, we'll simulate having an Agent0 ID token
+    const agentIdToken = "demo-agent0-id-token"
 
     const response = await fetch(`${request.nextUrl.origin}/api/agent0/cross-app-access`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${agentToken}`,
+        Authorization: `Bearer ${agentIdToken}`,
       },
       body: JSON.stringify({ target_app: targetApp }),
     })
 
     if (response.ok) {
       const data = await response.json()
-      console.log("[v0] Obtained cross-app token for", targetApp)
+      console.log("[v0] Obtained cross-app access token for", targetApp)
       return data.access_token
     } else {
       console.error("[v0] Failed to get cross-app token:", response.status)
