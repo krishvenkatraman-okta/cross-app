@@ -17,9 +17,16 @@ export async function POST(request: NextRequest) {
 
     const audienceUrl = target_app === "inventory" ? "https://auth.inventory.com/" : `https://auth.${target_app}.com/`
 
-    const clientAssertion = await generateClientAssertion("jarvis-client", crossAppConfig.tokenExchangeEndpoint)
+    const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
+    if (!clientId) {
+      return NextResponse.json({ error: "Missing Okta client ID configuration" }, { status: 500 })
+    }
+
+    const clientAssertion = await generateClientAssertion(clientId, crossAppConfig.tokenExchangeEndpoint)
 
     console.log("[v0] Making ID-JAG token exchange request to Okta:", crossAppConfig.tokenExchangeEndpoint)
+    console.log("[v0] Using client ID:", clientId)
+
     const idJagResponse = await fetch(crossAppConfig.tokenExchangeEndpoint, {
       method: "POST",
       headers: {
@@ -60,11 +67,15 @@ export async function POST(request: NextRequest) {
         ? `${request.nextUrl.origin}/api/inventory/oauth2/token`
         : `${request.nextUrl.origin}/api/${target_app}/oauth2/token`
 
+    const clientCredentials = Buffer.from(
+      `${clientId}:${process.env.OKTA_JARVIS_CLIENT_SECRET || "jarvis-secret"}`,
+    ).toString("base64")
+
     const accessTokenResponse = await fetch(tokenEndpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        Authorization: "Basic " + Buffer.from("jarvis-client:jarvis-secret").toString("base64"),
+        Authorization: "Basic " + clientCredentials,
       },
       body: new URLSearchParams({
         grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
