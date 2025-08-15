@@ -5,7 +5,6 @@ import { useAuth } from "@/components/auth-provider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Trash2 } from "lucide-react"
 
 interface Todo {
   id: string
@@ -91,6 +90,24 @@ export default function Todo0Page() {
     }
   }
 
+  const clearAllTodos = async () => {
+    if (!confirm("Are you sure you want to clear all todos? This will reset the demo.")) {
+      return
+    }
+
+    try {
+      const response = await fetch("/api/todo0/todos", {
+        method: "DELETE",
+      })
+
+      if (response.ok) {
+        setTodos([])
+      }
+    } catch (error) {
+      console.error("Failed to clear todos:", error)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
@@ -138,6 +155,19 @@ export default function Todo0Page() {
             </Button>
           </div>
 
+          {todos.length > 0 && (
+            <div className="mb-6 flex justify-end">
+              <Button
+                onClick={clearAllTodos}
+                variant="outline"
+                className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 bg-transparent"
+              >
+                <span className="mr-2">↻</span>
+                Clear All (Demo Reset)
+              </Button>
+            </div>
+          )}
+
           {/* Todo list */}
           <div className="space-y-3">
             {isLoadingTodos ? (
@@ -166,7 +196,7 @@ export default function Todo0Page() {
                     onClick={() => deleteTodo(todo.id)}
                     className="text-red-500 hover:text-red-700 hover:bg-red-50"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <span className="text-lg">🗑</span>
                   </Button>
                 </div>
               ))

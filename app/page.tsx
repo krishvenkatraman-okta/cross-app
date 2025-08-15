@@ -1,6 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Shield, Bot, CheckSquare, MessageSquare } from "lucide-react"
 import Link from "next/link"
 
 export default function HomePage() {
@@ -9,7 +8,7 @@ export default function HomePage() {
       <div className="container mx-auto px-4 py-8">
         <div className="text-center mb-12">
           <div className="flex items-center justify-center mb-4">
-            <Shield className="h-12 w-12 text-blue-600 mr-3" />
+            <span className="text-4xl mr-3">🛡️</span>
             <h1 className="text-4xl font-bold text-gray-900 dark:text-white">Okta Cross-App Access Demo</h1>
           </div>
           <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
@@ -21,7 +20,7 @@ export default function HomePage() {
           <Card className="hover:shadow-lg transition-shadow border-green-200">
             <CardHeader>
               <CardTitle className="flex items-center">
-                <CheckSquare className="h-5 w-5 mr-2 text-green-600" />
+                <span className="text-lg mr-2">✅</span>
                 Todo0 Enterprise App
               </CardTitle>
               <CardDescription>Task management application with Okta OIDC authentication</CardDescription>
@@ -36,7 +35,7 @@ export default function HomePage() {
           <Card className="hover:shadow-lg transition-shadow border-purple-200">
             <CardHeader>
               <CardTitle className="flex items-center">
-                <Bot className="h-5 w-5 mr-2 text-purple-600" />
+                <span className="text-lg mr-2">🤖</span>
                 Agent0 AI Assistant
               </CardTitle>
               <CardDescription>
@@ -55,7 +54,7 @@ export default function HomePage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
-                <MessageSquare className="h-5 w-5 mr-2 text-indigo-600" />
+                <span className="text-lg mr-2">💬</span>
                 Demo Flow
               </CardTitle>
             </CardHeader>

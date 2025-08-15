@@ -1,45 +1,20 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-const todos: Array<{
-  id: string
-  text: string
-  completed: boolean
-  createdAt: string
-  userId: string
-}> = []
+const todoSessions = new Map<
+  string,
+  Array<{
+    id: string
+    text: string
+    completed: boolean
+    createdAt: string
+    userId: string
+  }>
+>()
 
-if (todos.length === 0) {
-  const realUserId = "00up6GlznvCobuu31d7" // Real Okta user ID
-  todos.push(
-    {
-      id: "1",
-      text: "Analyse current week expenses",
-      completed: false,
-      createdAt: new Date().toISOString(),
-      userId: realUserId,
-    },
-    {
-      id: "2",
-      text: "Water indoor plants",
-      completed: false,
-      createdAt: new Date().toISOString(),
-      userId: realUserId,
-    },
-    {
-      id: "3",
-      text: "Organize wardrobe",
-      completed: false,
-      createdAt: new Date().toISOString(),
-      userId: realUserId,
-    },
-    {
-      id: "4",
-      text: "Deep clean kitchen",
-      completed: false,
-      createdAt: new Date().toISOString(),
-      userId: realUserId,
-    },
-  )
+function getSessionKey(userId: string): string {
+  const currentHour = new Date().getHours()
+  const currentDate = new Date().toDateString()
+  return `${userId}-${currentDate}-${currentHour}`
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
@@ -60,6 +35,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }
     }
 
+    const sessionKey = getSessionKey(userId)
+    const todos = todoSessions.get(sessionKey) || []
     const todoIndex = todos.findIndex((todo) => todo.id === todoId && todo.userId === userId)
 
     if (todoIndex === -1) {
@@ -70,6 +47,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       ...todos[todoIndex],
       completed: !!completed,
     }
+
+    todoSessions.set(sessionKey, todos)
 
     console.log("[v0] Todo updated:", { id: todoId, completed: !!completed, userId })
 
@@ -97,6 +76,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       }
     }
 
+    const sessionKey = getSessionKey(userId)
+    const todos = todoSessions.get(sessionKey) || []
     const todoIndex = todos.findIndex((todo) => todo.id === todoId && todo.userId === userId)
 
     if (todoIndex === -1) {
@@ -104,6 +85,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     }
 
     const deletedTodo = todos.splice(todoIndex, 1)[0]
+    todoSessions.set(sessionKey, todos)
 
     return NextResponse.json({ todo: deletedTodo })
   } catch (error) {
