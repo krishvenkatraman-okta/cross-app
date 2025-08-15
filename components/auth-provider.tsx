@@ -68,6 +68,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const currentPath = window.location.pathname
       if (currentPath.includes("/todo0")) {
         detectedAppType = "todo0"
+      } else if (currentPath.includes("/jarvis")) {
+        detectedAppType = "jarvis"
       } else if (currentPath.includes("/agent0")) {
         detectedAppType = "agent0"
       } else if (currentPath.includes("/admin") || currentPath.includes("/users")) {
@@ -77,14 +79,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    const isAgent0App = detectedAppType === "agent0"
+    const isJarvisApp = detectedAppType === "jarvis"
+    const isAgent0App = detectedAppType === "agent0" || isJarvisApp
     const isTodo0App = detectedAppType === "todo0"
 
-    const clientId = isAgent0App
-      ? process.env.NEXT_PUBLIC_OKTA_AGENT0_CLIENT_ID
-      : process.env.NEXT_PUBLIC_OKTA_TODO_CLIENT_ID
+    const clientId = isJarvisApp
+      ? process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
+      : isAgent0App
+        ? process.env.NEXT_PUBLIC_OKTA_AGENT0_CLIENT_ID
+        : process.env.NEXT_PUBLIC_OKTA_TODO_CLIENT_ID
 
-    const state = isAgent0App ? "agent0" : "todo0"
+    const state = isJarvisApp ? "jarvis" : isAgent0App ? "agent0" : "todo0"
 
     const issuer = process.env.NEXT_PUBLIC_OKTA_ISSUER
     const redirectUri = `${window.location.origin}/callback`
@@ -137,7 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signIn,
         signOut,
         hasPermission,
-        setUser, // Added setUser to context
+        setUser,
       }}
     >
       {children}
