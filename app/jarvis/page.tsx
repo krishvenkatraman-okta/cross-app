@@ -127,7 +127,7 @@ export default function JarvisPage() {
           id: "welcome",
           role: "assistant",
           content:
-            "Hello! I'm JARVIS, your AI assistant. I can help you manage your todos and answer questions. Try asking me 'What's in my todo list?' or 'Show me my tasks'.",
+            "Hello! I'm JARVIS, your AI assistant. I can help you manage your inventory and answer questions. Try asking me 'What's in my Texas inventory?' or 'Show me California warehouse stock'.",
           timestamp: new Date().toISOString(),
         },
       ])
@@ -234,7 +234,7 @@ export default function JarvisPage() {
                 </div>
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900">JARVIS</h1>
-                  <p className="text-sm text-gray-500">AI Assistant with Todo Access</p>
+                  <p className="text-sm text-gray-500">AI Assistant with Inventory Access</p>
                 </div>
               </div>
               <Button
@@ -307,7 +307,7 @@ export default function JarvisPage() {
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask me about your todos or anything else..."
+                placeholder="Ask me about your inventory or anything else..."
                 className="flex-1 text-base py-3 px-4 border-gray-200 rounded-lg"
                 onKeyPress={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
                 disabled={isGenerating}
@@ -321,7 +321,7 @@ export default function JarvisPage() {
               </Button>
             </div>
             <p className="text-xs text-gray-500 mt-2 text-center">
-              Signed in as {user?.email || "Unknown User"} • JARVIS can access your Todo data
+              Signed in as {user?.email || "Unknown User"} • JARVIS can access your Atlas Beverages Inventory data
             </p>
           </div>
         </div>
@@ -373,10 +373,10 @@ export default function JarvisPage() {
 
                 {tokens.todo_access_token && (
                   <TokenCard
-                    title="Todo Access Token"
+                    title="Inventory Access Token"
                     token={tokens.todo_access_token}
                     type="Bearer Token"
-                    usage="Todo0 API Access"
+                    usage="Atlas Beverages Inventory API Access"
                   />
                 )}
 

@@ -25,7 +25,7 @@ export function createDemoIdToken(): string {
 
 export function formatTodoResponse(todoData: any): string {
   if (!todoData || !todoData.todos || todoData.todos.length === 0) {
-    return "You don't have any todos yet! Head over to Todo0 to create some tasks."
+    return "You don't have any todos yet! Head over to Atlas Beverages Inventory to manage your warehouse stock."
   }
 
   const incompleteTodos = todoData.todos.filter((todo: any) => !todo.completed)
