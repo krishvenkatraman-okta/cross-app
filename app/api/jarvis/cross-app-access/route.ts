@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import crypto from "crypto"
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,6 +16,8 @@ export async function POST(request: NextRequest) {
 
     const audienceUrl = target_app === "inventory" ? "https://auth.inventory.com/" : `https://auth.${target_app}.com/`
 
+    const clientAssertion = await generateClientAssertion("jarvis-client", audienceUrl)
+
     const idJagResponse = await fetch(`${request.nextUrl.origin}/api/token-exchange`, {
       method: "POST",
       headers: {
@@ -27,7 +30,7 @@ export async function POST(request: NextRequest) {
         subject_token: idToken,
         subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
         client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-        client_assertion: "demo-client-assertion",
+        client_assertion: clientAssertion,
       }),
     })
 
@@ -96,4 +99,26 @@ export async function POST(request: NextRequest) {
     console.error("[v0] Cross-app access error:", error)
     return NextResponse.json({ error: "Failed to obtain cross-app access" }, { status: 500 })
   }
+}
+
+async function generateClientAssertion(clientId: string, audience: string) {
+  const now = Math.floor(Date.now() / 1000)
+
+  const claims = {
+    iss: clientId,
+    sub: clientId,
+    aud: process.env.NEXT_PUBLIC_OKTA_ISSUER || "https://dev-okta.okta.com",
+    iat: now,
+    exp: now + 300,
+    jti: crypto.randomUUID(),
+  }
+
+  const header = { alg: "HS256", typ: "JWT" }
+  const encodedHeader = Buffer.from(JSON.stringify(header)).toString("base64url")
+  const encodedPayload = Buffer.from(JSON.stringify(claims)).toString("base64url")
+
+  const secret = process.env.OKTA_JARVIS_CLIENT_SECRET || "demo-jwt-secret-key-for-client-assertions"
+  const signature = crypto.createHmac("sha256", secret).update(`${encodedHeader}.${encodedPayload}`).digest("base64url")
+
+  return `${encodedHeader}.${encodedPayload}.${signature}`
 }

@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import crypto from "crypto"
 
 export async function POST(request: NextRequest) {
   try {
@@ -133,15 +134,26 @@ async function validateIdToken(token: string) {
         aud: payload.aud,
       })
 
+      let sourceApp = "jarvis" // Default to jarvis
+      if (payload.aud) {
+        if (payload.aud.includes("jarvis") || payload.aud.includes("agent0")) {
+          sourceApp = "jarvis"
+        } else if (payload.aud.includes("todo0")) {
+          sourceApp = "todo0"
+        } else if (payload.aud.includes("inventory")) {
+          sourceApp = "inventory"
+        }
+      }
+
       return {
         valid: true,
-        app: "agent0", // The requesting app (Agent0)
+        app: sourceApp,
         userId: payload.sub || payload.preferred_username || "unknown-user",
-        userEmail: payload.email || "user@tables.fake",
+        userEmail: payload.email || "user@example.com",
       }
     } catch (decodeError) {
       console.error("[v0] Failed to decode ID token payload:", decodeError)
-      return { valid: false } // Don't fallback to demo data, fail validation instead
+      return { valid: false }
     }
   } catch (error) {
     console.error("[v0] ID token validation error:", error)
@@ -172,29 +184,42 @@ async function generateIdJagToken(params: {
   userEmail: string
   audience: string
 }) {
-  // Generate an Identity Assertion JWT (ID-JAG) as per the spec
   const now = Math.floor(Date.now() / 1000)
 
   const idJagClaims = {
-    iss: process.env.NEXT_PUBLIC_OKTA_ISSUER, // The IdP (Okta)
+    iss: process.env.NEXT_PUBLIC_OKTA_ISSUER || "https://dev-okta.okta.com", // The IdP (Okta)
     aud: params.audience, // The target authorization server
     sub: params.userId,
     email: params.userEmail,
     iat: now,
-    exp: now + 300, // 5 minutes as per spec
+    exp: now + 300, // 5 minutes as per RFC 8693 spec
     nbf: now,
     // Additional claims for cross-app access
     requesting_client: params.sourceApp,
     target_client: params.targetApp,
+    // Standard OAuth claims
+    client_id: `${params.sourceApp}-client`,
+    scope: "read write",
   }
 
   const header = { alg: "HS256", typ: "JWT" }
   const encodedHeader = Buffer.from(JSON.stringify(header)).toString("base64url")
   const encodedPayload = Buffer.from(JSON.stringify(idJagClaims)).toString("base64url")
-  const idJagToken = `${encodedHeader}.${encodedPayload}.demo-signature`
+
+  const secret = process.env.OKTA_JARVIS_CLIENT_SECRET || "demo-jwt-secret-key-for-id-jag-tokens"
+  const signature = crypto.createHmac("sha256", secret).update(`${encodedHeader}.${encodedPayload}`).digest("base64url")
+
+  const idJagToken = `${encodedHeader}.${encodedPayload}.${signature}`
+
+  console.log("[v0] Generated ID-JAG token with proper signature for:", {
+    sourceApp: params.sourceApp,
+    targetApp: params.targetApp,
+    userId: params.userId,
+    audience: params.audience,
+  })
 
   return {
     token: idJagToken,
-    expires_in: 300, // 5 minutes
+    expires_in: 300, // 5 minutes as per spec
   }
 }
