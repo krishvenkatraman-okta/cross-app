@@ -22,7 +22,7 @@ const WAREHOUSES = [
 ]
 
 export default function InventoryPage() {
-  const { user, signIn, isLoading } = useAuth()
+  const { user, signIn, signOut, isLoading } = useAuth()
   const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [selectedWarehouse, setSelectedWarehouse] = useState<string>("texas")
   const [newItem, setNewItem] = useState({ name: "", category: "", quantity: 0, sku: "" })
@@ -165,17 +165,26 @@ export default function InventoryPage() {
                 {selectedWarehouseInfo?.name} - {selectedWarehouseInfo?.location}
               </p>
             </div>
-            <select
-              value={selectedWarehouse}
-              onChange={(e) => setSelectedWarehouse(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg bg-white"
-            >
-              {WAREHOUSES.map((warehouse) => (
-                <option key={warehouse.id} value={warehouse.id}>
-                  {warehouse.name}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-4">
+              <select
+                value={selectedWarehouse}
+                onChange={(e) => setSelectedWarehouse(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg bg-white"
+              >
+                {WAREHOUSES.map((warehouse) => (
+                  <option key={warehouse.id} value={warehouse.id}>
+                    {warehouse.name}
+                  </option>
+                ))}
+              </select>
+              <Button
+                onClick={signOut}
+                variant="outline"
+                className="bg-red-600/20 border-red-500/30 text-red-600 hover:bg-red-600/30 hover:text-red-700 hover:border-red-400/50"
+              >
+                Logout
+              </Button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-8">
