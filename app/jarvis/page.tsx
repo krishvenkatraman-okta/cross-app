@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useRef } from "react"
+import { useAuth } from "@/components/auth-provider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
-import { generateCodeVerifier, generateCodeChallengeSync } from "@/utils/pkce"
 
 interface Message {
   id: string
@@ -13,108 +13,36 @@ interface Message {
   timestamp: string
 }
 
-interface AuthState {
-  isAuthenticated: boolean
-  user: { email: string; name: string } | null
-  idToken: string | null
-}
-
 export default function JarvisPage() {
-  const [authState, setAuthState] = useState<AuthState>({
-    isAuthenticated: false,
-    user: null,
-    idToken: null,
-  })
-  const [messages, setMessages] = useState<Message[]>([])
+  const { user, signIn, signOut, isLoading } = useAuth()
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: "welcome",
+      role: "assistant",
+      content:
+        "Hello! I'm JARVIS, your AI assistant. I can help you manage your inventory and answer questions. Try asking me 'What's in my Texas inventory?' or 'Show me California warehouse stock'.",
+      timestamp: new Date().toISOString(),
+    },
+  ])
   const [input, setInput] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    const checkAuth = () => {
-      console.log("[v0] Checking authentication state...")
+  const performTokenExchange = async () => {
+    try {
+      console.log("[v0] Starting token exchange for inventory access...")
 
+      // Get stored ID token
       const storedTokens = localStorage.getItem("okta_tokens")
-      if (storedTokens) {
-        try {
-          const tokens = JSON.parse(storedTokens)
-          if (tokens.id_token) {
-            // Decode ID token to get user info
-            const payload = JSON.parse(atob(tokens.id_token.split(".")[1]))
-            console.log("[v0] Found valid ID token for user:", payload.email)
-
-            setAuthState({
-              isAuthenticated: true,
-              user: { email: payload.email, name: payload.name || payload.email },
-              idToken: tokens.id_token,
-            })
-
-            setMessages([
-              {
-                id: "welcome",
-                role: "assistant",
-                content:
-                  "Hello! I'm JARVIS, your AI assistant. I can help you manage your inventory and answer questions. Try asking me 'What's in my Texas inventory?' or 'Show me California warehouse stock'.",
-                timestamp: new Date().toISOString(),
-              },
-            ])
-          }
-        } catch (error) {
-          console.error("[v0] Error parsing stored tokens:", error)
-          localStorage.removeItem("okta_tokens")
-        }
+      if (!storedTokens) {
+        throw new Error("No stored tokens found")
       }
 
-      setIsLoading(false)
-    }
-
-    checkAuth()
-  }, [])
-
-  const signIn = () => {
-    console.log("[v0] Starting OAuth sign-in...")
-
-    const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
-    const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER || "https://fcxdemo.okta.com/oauth2/v1"
-    const redirectUri = `${window.location.origin}/callback`
-
-    const codeVerifier = generateCodeVerifier()
-    const codeChallenge = generateCodeChallengeSync(codeVerifier)
-
-    // Store code verifier for token exchange
-    localStorage.setItem("pkce_code_verifier", codeVerifier)
-
-    const authUrl =
-      `${authServer}/authorize?` +
-      new URLSearchParams({
-        client_id: clientId!,
-        response_type: "code",
-        scope: "openid profile email",
-        redirect_uri: redirectUri,
-        state: "jarvis",
-        code_challenge: codeChallenge,
-        code_challenge_method: "S256",
-      })
-
-    console.log("[v0] Redirecting to Okta:", authUrl)
-    window.location.href = authUrl
-  }
-
-  const signOut = () => {
-    console.log("[v0] Signing out...")
-    localStorage.removeItem("okta_tokens")
-    setAuthState({ isAuthenticated: false, user: null, idToken: null })
-    setMessages([])
-
-    const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER || "https://fcxdemo.okta.com/oauth2/v1"
-    const logoutUrl = `${authServer}/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`
-    window.location.href = logoutUrl
-  }
-
-  const performTokenExchange = async (idToken: string) => {
-    try {
-      console.log("[v0] Starting token exchange with ID token...")
+      const tokens = JSON.parse(storedTokens)
+      const idToken = tokens.id_token
+      if (!idToken) {
+        throw new Error("No ID token found")
+      }
 
       // Extract Okta domain from ID token
       const payload = JSON.parse(atob(idToken.split(".")[1]))
@@ -165,10 +93,7 @@ export default function JarvisPage() {
       const inventoryResult = await inventoryResponse.json()
       console.log("[v0] Inventory token exchange successful")
 
-      return {
-        jagToken: jagResult.access_token,
-        inventoryToken: inventoryResult.access_token,
-      }
+      return inventoryResult.access_token
     } catch (error) {
       console.error("[v0] Token exchange error:", error)
       return null
@@ -176,7 +101,7 @@ export default function JarvisPage() {
   }
 
   const sendMessage = async () => {
-    if (!input.trim() || isGenerating || !authState.idToken) return
+    if (!input.trim() || isGenerating) return
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -196,13 +121,13 @@ export default function JarvisPage() {
       let inventoryData = null
       if (isInventoryQuery) {
         console.log("[v0] Inventory query detected, performing token exchange...")
-        const tokens = await performTokenExchange(authState.idToken)
+        const inventoryToken = await performTokenExchange()
 
-        if (tokens) {
+        if (inventoryToken) {
           // Make inventory API call
           const inventoryResponse = await fetch("/api/inventory", {
             headers: {
-              Authorization: `Bearer ${tokens.inventoryToken}`,
+              Authorization: `Bearer ${inventoryToken}`,
               "Content-Type": "application/json",
             },
           })
@@ -277,8 +202,7 @@ export default function JarvisPage() {
     )
   }
 
-  // Authentication required
-  if (!authState.isAuthenticated) {
+  if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 flex items-center justify-center p-4 relative overflow-hidden">
         <div
@@ -306,7 +230,7 @@ export default function JarvisPage() {
           <h1 className="text-2xl font-bold text-white mb-2">JARVIS</h1>
           <p className="text-blue-200 mb-6">AI Assistant with Inventory Access</p>
           <Button
-            onClick={signIn}
+            onClick={() => signIn("jarvis")}
             className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white py-3 shadow-lg shadow-blue-500/25 border-0"
           >
             Sign in with Okta
@@ -435,7 +359,7 @@ export default function JarvisPage() {
               </Button>
             </div>
             <p className="text-xs text-blue-300 mt-2 text-center">
-              Signed in as {authState.user?.email} • JARVIS can access your Atlas Beverages Inventory data
+              Signed in as {user?.email} • JARVIS can access your Atlas Beverages Inventory data
             </p>
           </div>
         </div>
