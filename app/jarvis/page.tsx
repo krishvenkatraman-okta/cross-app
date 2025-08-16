@@ -82,7 +82,7 @@ export default function JarvisPage() {
 
   useEffect(() => {
     if (!isLoading && !user) {
-      console.log("[v0] No authenticated user found, redirecting to login")
+      console.log("[v0] No authenticated user found, starting OAuth flow")
       signIn("jarvis")
     }
   }, [user, isLoading, signIn])
@@ -351,8 +351,66 @@ export default function JarvisPage() {
   if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 flex items-center justify-center p-4 relative overflow-hidden">
+        {/* Large outer ring */}
+        <div
+          className="absolute w-[800px] h-[800px] border border-cyan-400/10 rounded-full animate-spin"
+          style={{ animationDuration: "60s" }}
+        >
+          {Array.from({ length: 32 }).map((_, i) => (
+            <div
+              key={i}
+              className={`absolute w-0.5 h-12 ${i % 4 === 0 ? "bg-cyan-400/30" : "bg-cyan-400/10"}`}
+              style={{
+                top: "0px",
+                left: "50%",
+                transformOrigin: "50% 400px",
+                transform: `translateX(-50%) rotate(${i * 11.25}deg)`,
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Medium ring */}
+        <div
+          className="absolute w-[600px] h-[600px] border border-blue-400/15 rounded-full animate-spin"
+          style={{ animationDuration: "40s", animationDirection: "reverse" }}
+        >
+          {Array.from({ length: 24 }).map((_, i) => (
+            <div
+              key={i}
+              className="absolute w-1 h-8 bg-blue-400/20"
+              style={{
+                top: "20px",
+                left: "50%",
+                transformOrigin: "50% 280px",
+                transform: `translateX(-50%) rotate(${i * 15}deg)`,
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Inner ring */}
+        <div
+          className="absolute w-[400px] h-[400px] border border-yellow-400/20 rounded-full animate-spin"
+          style={{ animationDuration: "25s" }}
+        >
+          {Array.from({ length: 16 }).map((_, i) => (
+            <div
+              key={i}
+              className={`absolute w-1 h-16 ${i % 3 === 0 ? "bg-yellow-400/40" : "bg-yellow-400/15"}`}
+              style={{
+                top: "10px",
+                left: "50%",
+                transformOrigin: "50% 190px",
+                transform: `translateX(-50%) rotate(${i * 22.5}deg)`,
+              }}
+            />
+          ))}
+        </div>
+
         <div className="bg-slate-800/80 backdrop-blur-sm border border-blue-500/30 rounded-2xl shadow-2xl p-8 max-w-md w-full text-center relative z-10">
-          <p className="text-blue-200 mb-4">Redirecting to login...</p>
+          <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-blue-200 mb-4">Starting authentication...</p>
           <Button
             onClick={() => signIn("jarvis")}
             className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white py-3 shadow-lg shadow-blue-500/25 border-0"
