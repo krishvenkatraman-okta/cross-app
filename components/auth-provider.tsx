@@ -32,8 +32,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkAuthStatus = async () => {
     try {
-      // Check for existing session
-      const token = localStorage.getItem("okta_access_token")
+      const tokensJson = localStorage.getItem("okta_tokens")
+      const accessToken = localStorage.getItem("okta_access_token")
+
+      let token = accessToken
+      if (!token && tokensJson) {
+        try {
+          const tokens = JSON.parse(tokensJson)
+          token = tokens.access_token
+          // Update the individual access token storage for consistency
+          if (token) {
+            localStorage.setItem("okta_access_token", token)
+          }
+        } catch (e) {
+          console.error("Failed to parse stored tokens:", e)
+        }
+      }
+
       if (token) {
         await validateToken(token)
       }
@@ -133,8 +148,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     localStorage.removeItem("okta_access_token")
+    localStorage.removeItem("okta_tokens")
     localStorage.removeItem("okta_state")
     localStorage.removeItem("okta_nonce")
+    localStorage.removeItem("jarvis-tokens")
     setUser(null)
 
     const issuer = process.env.NEXT_PUBLIC_OKTA_ISSUER
