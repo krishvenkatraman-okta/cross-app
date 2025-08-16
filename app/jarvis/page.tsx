@@ -22,6 +22,7 @@ interface TokenInfo {
   token_type: string
   expires_in: number
   scope: string
+  success?: boolean
 }
 
 function TokenCard({ title, token, type, usage }: { title: string; token: string; type: string; usage: string }) {
@@ -104,14 +105,26 @@ export default function JarvisPage() {
         allTokens = { ...allTokens, ...oktaTokens }
       }
 
-      // Load JARVIS-specific cross-app tokens
       if (storedJarvisTokens) {
         const jarvisTokens = JSON.parse(storedJarvisTokens)
         console.log("[v0] Parsed jarvis-tokens:", jarvisTokens)
-        allTokens = { ...allTokens, ...jarvisTokens }
+
+        // Only include tokens that were actually granted (not failed attempts)
+        if (jarvisTokens.success !== false) {
+          allTokens = { ...allTokens, ...jarvisTokens }
+        } else {
+          console.log("[v0] Skipping failed JARVIS tokens")
+        }
       }
 
-      if (allTokens.inventory_access_token) {
+      if (!allTokens.id_jag_token || allTokens.id_jag_token.includes("demo")) {
+        delete allTokens.id_jag_token
+      }
+
+      if (!allTokens.inventory_access_token || allTokens.inventory_access_token.includes("demo")) {
+        delete allTokens.inventory_access_token
+        delete allTokens.todo_access_token
+      } else if (allTokens.inventory_access_token) {
         allTokens.todo_access_token = allTokens.inventory_access_token
       }
 
@@ -119,6 +132,7 @@ export default function JarvisPage() {
       setTokens(allTokens)
     } catch (error) {
       console.error("Failed to load tokens:", error)
+      setTokens(null)
     } finally {
       setIsLoadingTokens(false)
     }
@@ -189,11 +203,15 @@ export default function JarvisPage() {
 
         console.log("[v0] JARVIS API response data:", data)
 
-        if (data.tokens) {
-          console.log("[v0] JARVIS storing tokens:", data.tokens)
+        if (data.tokens && data.success !== false) {
+          console.log("[v0] JARVIS storing successful tokens:", data.tokens)
           setTokens((prev) => ({ ...prev, ...data.tokens }))
-          localStorage.setItem("jarvis-tokens", JSON.stringify(data.tokens))
+          localStorage.setItem("jarvis-tokens", JSON.stringify({ ...data.tokens, success: true }))
           setTimeout(() => loadTokens(), 100)
+        } else if (data.success === false) {
+          console.log("[v0] JARVIS token exchange failed, not storing tokens")
+          // Clear any failed token attempts
+          localStorage.setItem("jarvis-tokens", JSON.stringify({ success: false }))
         }
 
         const assistantMessage: Message = {
@@ -226,14 +244,23 @@ export default function JarvisPage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 flex items-center justify-center p-4 relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.1),transparent_50%)]"></div>
+        <div
+          className="absolute inset-0 bg-[conic-gradient(from_0deg_at_50%_50%,transparent_0deg,rgba(59,130,246,0.05)_60deg,transparent_120deg)] animate-spin"
+          style={{ animationDuration: "20s" }}
+        ></div>
+
+        <div className="bg-slate-800/80 backdrop-blur-sm border border-blue-500/30 rounded-2xl shadow-2xl p-8 max-w-md w-full text-center relative z-10">
+          <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-500/50">
             <span className="text-2xl">🤖</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">JARVIS AI Assistant</h1>
-          <p className="text-gray-600 mb-8">Please sign in with Okta to access your AI assistant</p>
-          <Button onClick={() => signIn("jarvis")} className="w-full bg-gray-900 hover:bg-gray-800 text-white py-3">
+          <h1 className="text-2xl font-bold text-white mb-2">JARVIS AI Assistant</h1>
+          <p className="text-blue-200 mb-8">Please sign in with Okta to access your AI assistant</p>
+          <Button
+            onClick={() => signIn("jarvis")}
+            className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white py-3 shadow-lg shadow-blue-500/25 border-0"
+          >
             Sign in with Okta
           </Button>
         </div>
@@ -242,24 +269,32 @@ export default function JarvisPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 flex">
-      <div className={`flex-1 transition-all duration-300 ${sidebarOpen ? "mr-96" : ""}`}>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 flex relative overflow-hidden">
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.03)_1px,transparent_1px)] bg-[size:50px_50px]"></div>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(59,130,246,0.1),transparent_50%)]"></div>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(34,197,94,0.05),transparent_50%)]"></div>
+      <div
+        className="absolute inset-0 bg-[conic-gradient(from_0deg_at_50%_50%,transparent_0deg,rgba(59,130,246,0.02)_60deg,transparent_120deg)] animate-spin"
+        style={{ animationDuration: "30s" }}
+      ></div>
+
+      <div className={`flex-1 transition-all duration-300 ${sidebarOpen ? "mr-96" : ""} relative z-10`}>
         <div className="max-w-4xl mx-auto p-4 h-screen flex flex-col">
-          <div className="bg-white rounded-t-2xl shadow-lg p-6 border-b">
+          <div className="bg-slate-800/90 backdrop-blur-sm border border-blue-500/30 rounded-t-2xl shadow-lg shadow-blue-500/10 p-6 border-b border-blue-500/20">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-full flex items-center justify-center shadow-lg shadow-blue-500/50">
                   <span className="text-xl">🤖</span>
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">JARVIS</h1>
-                  <p className="text-sm text-gray-500">AI Assistant with Inventory Access</p>
+                  <h1 className="text-2xl font-bold text-white">JARVIS</h1>
+                  <p className="text-sm text-blue-200">AI Assistant with Inventory Access</p>
                 </div>
               </div>
               <Button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 variant="outline"
-                className="flex items-center gap-2"
+                className="flex items-center gap-2 bg-slate-700/50 border-blue-500/30 text-blue-200 hover:bg-slate-600/50 hover:text-white hover:border-blue-400/50"
               >
                 <span>{sidebarOpen ? "▶" : "◀"}</span>
                 {sidebarOpen ? "Hide" : "Show"} Tokens
@@ -267,29 +302,31 @@ export default function JarvisPage() {
             </div>
           </div>
 
-          <div className="flex-1 bg-white shadow-lg overflow-y-auto p-6 space-y-4">
+          <div className="flex-1 bg-slate-800/90 backdrop-blur-sm border-l border-r border-blue-500/30 shadow-lg overflow-y-auto p-6 space-y-4">
             {messages.map((message) => (
               <div
                 key={message.id}
                 className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 {message.role === "assistant" && (
-                  <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-500/50">
                     <span className="text-sm">🤖</span>
                   </div>
                 )}
                 <Card
-                  className={`max-w-[70%] p-4 ${
-                    message.role === "user" ? "bg-blue-500 text-white ml-auto" : "bg-gray-100 text-gray-900"
+                  className={`max-w-[70%] p-4 border-0 shadow-lg ${
+                    message.role === "user"
+                      ? "bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-blue-500/25"
+                      : "bg-slate-700/80 backdrop-blur-sm text-blue-100 shadow-slate-900/50"
                   }`}
                 >
                   <p className="text-sm leading-relaxed whitespace-pre-line">{message.content}</p>
-                  <p className={`text-xs mt-2 ${message.role === "user" ? "text-blue-100" : "text-gray-500"}`}>
+                  <p className={`text-xs mt-2 ${message.role === "user" ? "text-blue-100" : "text-blue-300"}`}>
                     {new Date(message.timestamp).toLocaleTimeString()}
                   </p>
                 </Card>
                 {message.role === "user" && (
-                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <div className="w-8 h-8 bg-gradient-to-br from-slate-600 to-slate-500 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
                     <span className="text-sm">👤</span>
                   </div>
                 )}
@@ -297,23 +334,23 @@ export default function JarvisPage() {
             ))}
             {isGenerating && (
               <div className="flex gap-3 justify-start">
-                <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-500/50">
                   <span className="text-sm">🤖</span>
                 </div>
-                <Card className="bg-gray-100 text-gray-900 p-4">
+                <Card className="bg-slate-700/80 backdrop-blur-sm text-blue-100 p-4 border-0 shadow-lg shadow-slate-900/50">
                   <div className="flex items-center gap-2">
                     <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
                       <div
-                        className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                        className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"
                         style={{ animationDelay: "0.1s" }}
                       ></div>
                       <div
-                        className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                        className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"
                         style={{ animationDelay: "0.2s" }}
                       ></div>
                     </div>
-                    <span className="text-sm text-gray-500">JARVIS is thinking...</span>
+                    <span className="text-sm text-blue-300">JARVIS is thinking...</span>
                   </div>
                 </Card>
               </div>
@@ -321,25 +358,25 @@ export default function JarvisPage() {
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="bg-white rounded-b-2xl shadow-lg p-6 border-t">
+          <div className="bg-slate-800/90 backdrop-blur-sm border border-blue-500/30 rounded-b-2xl shadow-lg shadow-blue-500/10 p-6 border-t border-blue-500/20">
             <div className="flex gap-3">
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask me about your inventory or anything else..."
-                className="flex-1 text-base py-3 px-4 border-gray-200 rounded-lg"
+                className="flex-1 text-base py-3 px-4 bg-slate-700/50 border-blue-500/30 rounded-lg text-white placeholder-blue-300 focus:border-blue-400 focus:ring-blue-400/50"
                 onKeyPress={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
                 disabled={isGenerating}
               />
               <Button
                 onClick={sendMessage}
                 disabled={!input.trim() || isGenerating}
-                className="bg-purple-500 hover:bg-purple-600 text-white px-6 py-3 rounded-lg"
+                className="bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white px-6 py-3 rounded-lg shadow-lg shadow-blue-500/25 border-0"
               >
                 ➤
               </Button>
             </div>
-            <p className="text-xs text-gray-500 mt-2 text-center">
+            <p className="text-xs text-blue-300 mt-2 text-center">
               Signed in as {user?.email || "Unknown User"} • JARVIS can access your Atlas Beverages Inventory data
             </p>
           </div>
@@ -347,15 +384,15 @@ export default function JarvisPage() {
       </div>
 
       {sidebarOpen && (
-        <div className="fixed right-0 top-0 h-full w-96 bg-white shadow-2xl border-l border-gray-200 overflow-y-auto">
+        <div className="fixed right-0 top-0 h-full w-96 bg-slate-800/95 backdrop-blur-sm shadow-2xl border-l border-blue-500/30 overflow-y-auto">
           <div className="p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-gray-900">OAuth Tokens</h2>
+              <h2 className="text-xl font-bold text-white">OAuth Tokens</h2>
               <Button
                 onClick={() => setSidebarOpen(false)}
                 variant="ghost"
                 size="sm"
-                className="text-gray-500 hover:text-gray-700"
+                className="text-blue-300 hover:text-white hover:bg-slate-700/50"
               >
                 ✕
               </Button>
@@ -363,8 +400,8 @@ export default function JarvisPage() {
 
             {isLoadingTokens ? (
               <div className="text-center py-8">
-                <div className="animate-spin w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                <p className="text-gray-500">Loading tokens...</p>
+                <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                <p className="text-blue-300">Loading tokens...</p>
               </div>
             ) : tokens ? (
               <div className="space-y-4">
@@ -410,8 +447,13 @@ export default function JarvisPage() {
               </div>
             ) : (
               <div className="text-center py-8">
-                <p className="text-gray-500 mb-4">No tokens available</p>
-                <Button onClick={loadTokens} variant="outline" size="sm">
+                <p className="text-blue-300 mb-4">No tokens available</p>
+                <Button
+                  onClick={loadTokens}
+                  variant="outline"
+                  size="sm"
+                  className="border-blue-500/30 text-blue-200 hover:bg-slate-700/50 bg-transparent"
+                >
                   Refresh Tokens
                 </Button>
               </div>
