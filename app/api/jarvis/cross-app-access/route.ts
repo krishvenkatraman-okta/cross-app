@@ -95,15 +95,11 @@ export async function POST(request: NextRequest) {
     console.log("[v0] Request body parameters:", Array.from(requestBody.keys()))
     console.log("[v0] Subject token is present in request:", requestBody.has("subject_token"))
 
-    const cookieHeader = request.headers.get("cookie")
     const headers: Record<string, string> = {
       "Content-Type": "application/x-www-form-urlencoded",
     }
 
-    if (cookieHeader) {
-      headers["Cookie"] = cookieHeader
-      console.log("[v0] Forwarding session cookies to Okta")
-    }
+    console.log("[v0] Making simple request to match working curl format")
 
     const idJagResponse = await fetch(dynamicTokenEndpoint, {
       method: "POST",
