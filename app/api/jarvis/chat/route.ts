@@ -182,7 +182,10 @@ async function performServerSideTokenExchange(idToken: string) {
     console.log("[v0] Token exchange successful, got ID-JAG token")
 
     // Step 2: Use ID-JAG token to get access token from inventory app
-    const inventoryTokenResponse = await fetch("/api/inventory/oauth2/token", {
+    const inventoryTokenUrl = `${process.env.NEXT_PUBLIC_BASE_URL || "https://cross-app-indol.vercel.app"}/api/inventory/oauth2/token`
+    console.log("[v0] Making inventory token request to:", inventoryTokenUrl)
+
+    const inventoryTokenResponse = await fetch(inventoryTokenUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
