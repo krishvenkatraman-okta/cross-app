@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
   let inventoryData: any = null
 
   try {
-    const { message, history } = await request.json()
+    const { message, history, crossAppTokens } = await request.json()
 
     console.log("[v0] JARVIS received message:", message)
 
@@ -26,68 +26,63 @@ export async function POST(request: NextRequest) {
     }
 
     if (aiAnalysis.isInventoryQuery) {
-      console.log("[v0] Detected inventory query, attempting cross-app access")
+      console.log("[v0] Detected inventory query, using client-provided tokens")
 
-      try {
-        const crossAppTokens = await getCrossAppToken(request, "inventory")
-        console.log("[v0] Cross-app tokens result:", crossAppTokens ? "SUCCESS" : "FAILED")
+      if (crossAppTokens) {
+        console.log("[v0] Using client-provided cross-app tokens")
 
-        if (crossAppTokens) {
-          const tokenData = {
-            id_jag_token: crossAppTokens.id_jag_token,
-            inventory_access_token: crossAppTokens.inventory_access_token,
-          }
-
-          console.log(
-            "[v0] Fetching inventory with token:",
-            crossAppTokens.inventory_access_token?.substring(0, 20) + "...",
-          )
-
-          const inventoryResponse = await fetch(
-            `${request.nextUrl.origin}/api/inventory/items?warehouse=${aiAnalysis.warehouse}`,
-            {
-              headers: {
-                Authorization: `Bearer ${crossAppTokens.inventory_access_token}`,
-              },
-            },
-          )
-
-          console.log("[v0] Inventory API response status:", inventoryResponse.status)
-
-          if (inventoryResponse.ok) {
-            inventoryData = await inventoryResponse.json()
-            console.log("[v0] Retrieved inventory data:", {
-              itemsCount: inventoryData?.items?.length || 0,
-              warehouse: inventoryData?.warehouse,
-              items:
-                inventoryData?.items?.map((item: any) => ({
-                  name: item.name,
-                  quantity: item.quantity,
-                  warehouse: item.warehouse,
-                })) || [],
-            })
-
-            let response
-            try {
-              response = await generateInventoryResponseWithAI(message, inventoryData, aiAnalysis)
-            } catch (error) {
-              console.log("[v0] AI response generation failed, using simple fallback:", error)
-              response = generateSimpleInventoryResponse(message, inventoryData, aiAnalysis)
-            }
-
-            return NextResponse.json({
-              message: response,
-              tokens: tokenData,
-            })
-          } else {
-            const errorText = await inventoryResponse.text()
-            console.error("[v0] Failed to fetch inventory:", inventoryResponse.status, errorText)
-          }
-        } else {
-          console.log("[v0] No cross-app token available")
+        const tokenData = {
+          id_jag_token: crossAppTokens.id_jag_token,
+          inventory_access_token: crossAppTokens.inventory_access_token,
         }
-      } catch (error) {
-        console.error("[v0] Failed to fetch inventory:", error)
+
+        console.log(
+          "[v0] Fetching inventory with token:",
+          crossAppTokens.inventory_access_token?.substring(0, 20) + "...",
+        )
+
+        const inventoryResponse = await fetch(
+          `${request.nextUrl.origin}/api/inventory/items?warehouse=${aiAnalysis.warehouse}`,
+          {
+            headers: {
+              Authorization: `Bearer ${crossAppTokens.inventory_access_token}`,
+            },
+          },
+        )
+
+        console.log("[v0] Inventory API response status:", inventoryResponse.status)
+
+        if (inventoryResponse.ok) {
+          inventoryData = await inventoryResponse.json()
+          console.log("[v0] Retrieved inventory data:", {
+            itemsCount: inventoryData?.items?.length || 0,
+            warehouse: inventoryData?.warehouse,
+            items:
+              inventoryData?.items?.map((item: any) => ({
+                name: item.name,
+                quantity: item.quantity,
+                warehouse: item.warehouse,
+              })) || [],
+          })
+
+          let response
+          try {
+            response = await generateInventoryResponseWithAI(message, inventoryData, aiAnalysis)
+          } catch (error) {
+            console.log("[v0] AI response generation failed, using simple fallback:", error)
+            response = generateSimpleInventoryResponse(message, inventoryData, aiAnalysis)
+          }
+
+          return NextResponse.json({
+            message: response,
+            tokens: tokenData,
+          })
+        } else {
+          const errorText = await inventoryResponse.text()
+          console.error("[v0] Failed to fetch inventory:", inventoryResponse.status, errorText)
+        }
+      } else {
+        console.log("[v0] No cross-app tokens provided by client")
       }
     }
 
@@ -300,82 +295,4 @@ function extractWarehouse(message: string): string {
   }
 
   return "texas"
-}
-
-async function getCrossAppToken(
-  request: NextRequest,
-  targetApp: string,
-): Promise<{ id_jag_token: string; inventory_access_token: string } | null> {
-  try {
-    const authHeader = request.headers.get("authorization")
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      console.log("[v0] No Authorization header found")
-      return null
-    }
-
-    const userIdToken = authHeader.substring(7)
-    console.log("[v0] Using ID token from Authorization header:", userIdToken?.substring(0, 20) + "...")
-
-    const tokenParts = userIdToken.split(".")
-    if (tokenParts.length !== 3) {
-      console.log("[v0] Invalid JWT format")
-      return null
-    }
-
-    const payload = JSON.parse(Buffer.from(tokenParts[1], "base64url").toString())
-    console.log("[v0] ID token payload:", {
-      issuer: payload.iss,
-      audience: payload.aud,
-      subject: payload.sub,
-      expires: payload.exp,
-      expired: payload.exp < Math.floor(Date.now() / 1000),
-    })
-
-    if (payload.exp < Math.floor(Date.now() / 1000)) {
-      console.log("[v0] ID token is expired")
-      return null
-    }
-
-    const oktaDomain = payload.iss
-    const clientId = payload.aud
-    const clientSecret = process.env.OKTA_JARVIS_CLIENT_SECRET
-    const audience = process.env.NEXT_PUBLIC_OKTA_AUDIENCE || "http://localhost:5001"
-
-    const tokenEndpoint = `${oktaDomain}/oauth2/v1/token`
-
-    console.log("[v0] Making direct token exchange to:", tokenEndpoint)
-
-    const tokenExchangeResponse = await fetch(tokenEndpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
-        requested_token_type: "urn:ietf:params:oauth:token-type:id-jag",
-        subject_token: userIdToken,
-        subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
-        audience: audience,
-        client_id: clientId,
-        client_secret: clientSecret || "",
-      }),
-    })
-
-    if (tokenExchangeResponse.ok) {
-      const jagTokenData = await tokenExchangeResponse.json()
-      console.log("[v0] Successfully obtained JAG token")
-
-      return {
-        id_jag_token: jagTokenData.access_token,
-        inventory_access_token: jagTokenData.access_token,
-      }
-    } else {
-      const errorText = await tokenExchangeResponse.text()
-      console.error("[v0] Token exchange failed:", tokenExchangeResponse.status, errorText)
-      return null
-    }
-  } catch (error) {
-    console.error("[v0] Direct token exchange failed:", error)
-    return null
-  }
 }

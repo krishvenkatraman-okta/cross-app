@@ -80,6 +80,64 @@ export default function JarvisPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  const performTokenExchange = async (
+    idToken: string,
+  ): Promise<{ id_jag_token: string; inventory_access_token: string } | null> => {
+    try {
+      console.log("[v0] Client-side token exchange starting...")
+
+      const tokenParts = idToken.split(".")
+      if (tokenParts.length !== 3) {
+        console.log("[v0] Invalid JWT format")
+        return null
+      }
+
+      const payload = JSON.parse(Buffer.from(tokenParts[1], "base64url").toString())
+      const oktaDomain = payload.iss
+      const clientId = payload.aud
+      const clientSecret = process.env.OKTA_JARVIS_CLIENT_SECRET
+      const audience = process.env.NEXT_PUBLIC_OKTA_AUDIENCE || "http://localhost:5001"
+
+      const tokenEndpoint = `${oktaDomain}/oauth2/v1/token`
+
+      console.log("[v0] Making client-side token exchange to:", tokenEndpoint)
+
+      const tokenExchangeResponse = await fetch(tokenEndpoint, {
+        method: "POST",
+        credentials: "include", // Include session cookies
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+          requested_token_type: "urn:ietf:params:oauth:token-type:id-jag",
+          subject_token: idToken,
+          subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
+          audience: audience,
+          client_id: clientId,
+          client_secret: clientSecret || "",
+        }),
+      })
+
+      if (tokenExchangeResponse.ok) {
+        const jagTokenData = await tokenExchangeResponse.json()
+        console.log("[v0] Client-side token exchange successful")
+
+        return {
+          id_jag_token: jagTokenData.access_token,
+          inventory_access_token: jagTokenData.access_token,
+        }
+      } else {
+        const errorText = await tokenExchangeResponse.text()
+        console.error("[v0] Client-side token exchange failed:", tokenExchangeResponse.status, errorText)
+        return null
+      }
+    } catch (error) {
+      console.error("[v0] Client-side token exchange error:", error)
+      return null
+    }
+  }
+
   const loadTokens = async () => {
     setIsLoadingTokens(true)
     try {
@@ -176,6 +234,8 @@ export default function JarvisPage() {
         Cookie: document.cookie,
       }
 
+      let crossAppTokens = null
+
       if (storedOktaTokens) {
         const oktaTokens = JSON.parse(storedOktaTokens)
         if (oktaTokens.id_token) {
@@ -184,6 +244,13 @@ export default function JarvisPage() {
             "[v0] JARVIS sending ID token in Authorization header:",
             oktaTokens.id_token.substring(0, 20) + "...",
           )
+
+          crossAppTokens = await performTokenExchange(oktaTokens.id_token)
+          if (crossAppTokens) {
+            console.log("[v0] Client-side token exchange successful, sending tokens to server")
+          } else {
+            console.log("[v0] Client-side token exchange failed")
+          }
 
           try {
             const tokenParts = oktaTokens.id_token.split(".")
@@ -213,6 +280,7 @@ export default function JarvisPage() {
         body: JSON.stringify({
           message: userMessage.content,
           history: messages,
+          crossAppTokens: crossAppTokens, // Send client-side tokens to server
         }),
       })
 
