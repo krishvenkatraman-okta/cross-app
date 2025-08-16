@@ -120,6 +120,7 @@ export function getAuthServerUrls(baseUrl = "https://fcxdemo.okta.com") {
     authorize: buildAuthServerUrl(baseUrl, "/authorize"),
     token: buildAuthServerUrl(baseUrl, "/token"),
     logout: buildAuthServerUrl(baseUrl, "/logout"),
+    userinfo: buildAuthServerUrl(baseUrl, "/userinfo"),
     issuer: authServerType === "default" ? `${baseUrl}/oauth2/default` : baseUrl,
   }
 }

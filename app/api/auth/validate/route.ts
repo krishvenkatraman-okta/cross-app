@@ -17,8 +17,15 @@ export async function GET(request: NextRequest) {
 
     const authServerUrls = getAuthServerUrls(issuer)
 
+    if (!authServerUrls.userinfo) {
+      console.error("[v0] Userinfo URL is undefined")
+      return NextResponse.json({ error: "Configuration error" }, { status: 500 })
+    }
+
+    console.log("[v0] Validating token with:", authServerUrls.userinfo)
+
     // Validate token with Okta using the correct authorization server
-    const userResponse = await fetch(`${authServerUrls.userinfo}`, {
+    const userResponse = await fetch(authServerUrls.userinfo, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
