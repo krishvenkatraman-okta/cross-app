@@ -17,6 +17,8 @@ export default function CallbackPage() {
         const state = searchParams.get("state")
         const error = searchParams.get("error")
 
+        console.log("[v0] Callback processing started", { code: code?.substring(0, 10) + "...", state, error })
+
         if (error) {
           setError(`Authentication failed: ${error}`)
           return
@@ -27,6 +29,7 @@ export default function CallbackPage() {
           return
         }
 
+        console.log("[v0] Making callback API request...")
         const response = await fetch("/api/auth/callback", {
           method: "POST",
           headers: {
@@ -35,18 +38,44 @@ export default function CallbackPage() {
           body: JSON.stringify({ code, state }),
         })
 
+        console.log("[v0] Callback API response status:", response.status, response.statusText)
+
         if (!response.ok) {
+          const errorText = await response.text()
+          console.error("[v0] Callback API error:", errorText)
           throw new Error("Failed to process authentication")
         }
 
-        const { user, tokens } = await response.json()
+        const responseData = await response.json()
+        console.log("[v0] Callback API response data:", {
+          hasUser: !!responseData.user,
+          userEmail: responseData.user?.email,
+          hasTokens: !!responseData.tokens,
+          tokenKeys: responseData.tokens ? Object.keys(responseData.tokens) : [],
+        })
+
+        const { user, tokens } = responseData
 
         // Set user in auth context
+        console.log("[v0] Setting user in auth context:", user?.email)
         setUser(user)
 
         if (tokens) {
+          console.log("[v0] Storing tokens in localStorage...")
           localStorage.setItem("okta_tokens", JSON.stringify(tokens))
           localStorage.setItem("okta_access_token", tokens.access_token)
+
+          // Verify storage
+          const storedTokens = localStorage.getItem("okta_tokens")
+          const storedAccessToken = localStorage.getItem("okta_access_token")
+          console.log("[v0] Token storage verification:", {
+            storedTokens: !!storedTokens,
+            storedAccessToken: !!storedAccessToken,
+            tokensLength: storedTokens?.length,
+            accessTokenLength: storedAccessToken?.length,
+          })
+        } else {
+          console.error("[v0] No tokens received from callback API!")
         }
 
         let redirectPath = "/"
