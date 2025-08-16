@@ -75,11 +75,11 @@ export default function JarvisPage() {
     console.log("[v0] Starting OAuth sign-in...")
 
     const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
-    const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER
+    const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER || "https://fcxdemo.okta.com/oauth2/v1"
     const redirectUri = `${window.location.origin}/callback`
 
     const authUrl =
-      `${authServer}/oauth2/v1/authorize?` +
+      `${authServer}/authorize?` +
       new URLSearchParams({
         client_id: clientId!,
         response_type: "code",
@@ -98,9 +98,8 @@ export default function JarvisPage() {
     setAuthState({ isAuthenticated: false, user: null, idToken: null })
     setMessages([])
 
-    // Redirect to Okta logout
-    const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER
-    const logoutUrl = `${authServer}/oauth2/v1/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`
+    const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER || "https://fcxdemo.okta.com/oauth2/v1"
+    const logoutUrl = `${authServer}/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`
     window.location.href = logoutUrl
   }
 

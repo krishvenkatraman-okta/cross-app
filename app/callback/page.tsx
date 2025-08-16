@@ -31,12 +31,12 @@ export default function CallbackPage() {
 
         const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
         const clientSecret = process.env.OKTA_JARVIS_CLIENT_SECRET
-        const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER
+        const issuer = process.env.NEXT_PUBLIC_OKTA_ISSUER || "https://fcxdemo.okta.com"
         const redirectUri = `${window.location.origin}/callback`
 
         console.log("[v0] Exchanging authorization code for tokens...")
 
-        const tokenResponse = await fetch(`${authServer}/oauth2/v1/token`, {
+        const tokenResponse = await fetch(`${issuer}/oauth2/v1/token`, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({
