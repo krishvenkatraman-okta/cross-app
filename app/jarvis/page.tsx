@@ -449,9 +449,12 @@ export default function JarvisPage() {
 
         <div className="bg-slate-800/80 backdrop-blur-sm border border-blue-500/30 rounded-2xl shadow-2xl p-8 max-w-md w-full text-center relative z-10">
           <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-blue-200 mb-4">Starting authentication...</p>
+          <p className="text-blue-200 mb-4">Authentication required...</p>
           <Button
-            onClick={() => signIn("jarvis")}
+            onClick={() => {
+              console.log("[v0] Manual sign-in button clicked")
+              signIn("jarvis")
+            }}
             className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white py-3 shadow-lg shadow-blue-500/25 border-0"
           >
             Sign in with Okta
