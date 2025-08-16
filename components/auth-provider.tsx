@@ -2,8 +2,20 @@
 
 import type React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
-import { getAuthServerUrls } from "@/lib/okta-config"
-import { generateCodeVerifier, generateCodeChallenge } from "@/utils/pkce"
+
+interface OktaAuth {
+  signInWithRedirect: (options?: any) => Promise<void>
+  handleLoginRedirect: () => Promise<void>
+  getUser: () => Promise<any>
+  getAccessToken: () => string | undefined
+  getIdToken: () => string | undefined
+  isAuthenticated: () => Promise<boolean>
+  signOut: () => Promise<void>
+  tokenManager: {
+    get: (key: string) => Promise<any>
+    on: (event: string, callback: Function) => void
+  }
+}
 
 interface User {
   id: string
@@ -23,70 +35,83 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
+let oktaAuth: OktaAuth | null = null
+
+const initializeOktaAuth = (appType = "jarvis") => {
+  if (typeof window === "undefined") return null
+
+  const clientId =
+    appType === "jarvis"
+      ? process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
+      : process.env.NEXT_PUBLIC_OKTA_INVENTORY_CLIENT_ID || process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
+
+  const issuer = process.env.NEXT_PUBLIC_OKTA_ISSUER || "https://fcxdemo.okta.com"
+
+  if (!clientId || !issuer) {
+    console.error("[v0] Missing Okta configuration for", appType)
+    return null
+  }
+
+  import("@okta/okta-auth-js")
+    .then(({ OktaAuth }) => {
+      oktaAuth = new OktaAuth({
+        issuer,
+        clientId,
+        redirectUri: `${window.location.origin}/callback`,
+        scopes: ["openid", "profile", "email"],
+        pkce: true, // Enable PKCE
+        responseType: "code",
+        state: appType,
+      })
+
+      console.log("[v0] Okta Auth initialized for", appType, "with PKCE enabled")
+    })
+    .catch((error) => {
+      console.error("[v0] Failed to initialize Okta Auth:", error)
+    })
+
+  return oktaAuth
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     checkAuthStatus()
-
-    const interval = setInterval(() => {
-      // If user is set but no tokens exist, clear the user
-      if (user) {
-        const tokensJson = localStorage.getItem("okta_tokens")
-        const accessToken = localStorage.getItem("okta_access_token")
-
-        if (!tokensJson && !accessToken) {
-          console.log("[v0] Tokens cleared but user still set, clearing user state")
-          setUser(null)
-        }
-      }
-    }, 1000) // Check every second
-
-    return () => clearInterval(interval)
-  }, [user])
+  }, [])
 
   const checkAuthStatus = async () => {
     try {
       console.log("[v0] === AUTH STATUS CHECK START ===")
-      console.log("[v0] All localStorage keys:", Object.keys(localStorage))
-      console.log("[v0] localStorage contents:", {
-        okta_tokens: localStorage.getItem("okta_tokens"),
-        okta_access_token: localStorage.getItem("okta_access_token"),
-        jarvis_tokens: localStorage.getItem("jarvis-tokens"),
-      })
+
+      if (window.location.pathname === "/callback") {
+        console.log("[v0] In callback, handling login redirect")
+        await handleCallback()
+        return
+      }
 
       const tokensJson = localStorage.getItem("okta_tokens")
-      let token = null
-
       if (tokensJson) {
         try {
           const tokens = JSON.parse(tokensJson)
-          token = tokens.access_token || tokens.id_token
-          console.log("[v0] Found tokens in okta_tokens:", {
-            hasAccessToken: !!tokens.access_token,
-            hasIdToken: !!tokens.id_token,
-            tokenType: tokens.token_type,
-            selectedToken: token ? "present" : "missing",
-          })
+          if (tokens.id_token) {
+            const payload = JSON.parse(atob(tokens.id_token.split(".")[1]))
+            const userData = {
+              id: payload.sub,
+              email: payload.email || payload.preferred_username,
+              name: payload.name || `${payload.given_name || ""} ${payload.family_name || ""}`.trim() || payload.email,
+              groups: payload.groups || ["user"],
+            }
+            setUser(userData)
+            console.log("[v0] User restored from stored tokens:", userData.email)
+          }
         } catch (e) {
           console.error("[v0] Failed to parse stored tokens:", e)
+          localStorage.removeItem("okta_tokens")
         }
-      } else {
-        console.log("[v0] No okta_tokens found in localStorage")
       }
 
-      if (!token) {
-        token = localStorage.getItem("okta_access_token")
-        console.log("[v0] Fallback to okta_access_token:", token ? "present" : "missing")
-      }
-
-      if (token) {
-        console.log("[v0] Token found, proceeding with validation")
-        await validateToken(token)
-      } else {
-        console.log("[v0] No valid tokens found, user needs to login")
-      }
       console.log("[v0] === AUTH STATUS CHECK END ===")
     } catch (error) {
       console.error("[v0] Auth check failed:", error)
@@ -95,134 +120,107 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const validateToken = async (token: string) => {
+  const handleCallback = async () => {
     try {
-      console.log("[v0] Token found, extracting user info from stored tokens")
-
-      const tokensJson = localStorage.getItem("okta_tokens")
-      if (tokensJson) {
-        try {
-          const tokens = JSON.parse(tokensJson)
-          if (tokens.id_token) {
-            // Decode ID token to get user info (simple base64 decode, no verification needed for demo)
-            const payload = JSON.parse(atob(tokens.id_token.split(".")[1]))
-            const userData = {
-              id: payload.sub,
-              email: payload.email || payload.preferred_username,
-              name: payload.name || payload.given_name + " " + payload.family_name || payload.email,
-              groups: payload.groups || ["user"],
-            }
-            setUser(userData)
-            console.log("[v0] User set from stored ID token:", userData.email)
-            return
-          }
-        } catch (e) {
-          console.error("[v0] Failed to decode ID token:", e)
-        }
+      if (!oktaAuth) {
+        // Initialize with default app type for callback
+        initializeOktaAuth("jarvis")
+        // Wait a bit for initialization
+        await new Promise((resolve) => setTimeout(resolve, 100))
       }
 
-      console.log("[v0] No valid ID token found, user remains null")
-      setUser(null)
+      if (oktaAuth) {
+        console.log("[v0] Handling login redirect with okta-auth-js")
+        await oktaAuth.handleLoginRedirect()
+
+        const isAuthenticated = await oktaAuth.isAuthenticated()
+        if (isAuthenticated) {
+          const userInfo = await oktaAuth.getUser()
+          const idToken = oktaAuth.getIdToken()
+          const accessToken = oktaAuth.getAccessToken()
+
+          const tokens = {
+            id_token: idToken,
+            access_token: accessToken,
+            token_type: "Bearer",
+          }
+          localStorage.setItem("okta_tokens", JSON.stringify(tokens))
+
+          const userData = {
+            id: userInfo.sub,
+            email: userInfo.email || userInfo.preferred_username,
+            name:
+              userInfo.name || `${userInfo.given_name || ""} ${userInfo.family_name || ""}`.trim() || userInfo.email,
+            groups: userInfo.groups || ["user"],
+          }
+
+          setUser(userData)
+          console.log("[v0] Authentication successful, user set:", userData.email)
+
+          // Redirect to appropriate page
+          const state = new URLSearchParams(window.location.search).get("state")
+          const redirectPath = state === "jarvis" ? "/jarvis" : state === "inventory" ? "/inventory" : "/"
+          window.location.href = redirectPath
+        }
+      }
     } catch (error) {
-      console.error("Token processing failed:", error)
-      setUser(null)
+      console.error("[v0] Callback handling failed:", error)
+      window.location.href = "/?error=auth_failed"
     }
   }
 
   const signIn = async (appType?: string) => {
-    let detectedAppType = appType
-
-    if (!detectedAppType) {
-      const currentPath = window.location.pathname
-      if (currentPath.includes("/inventory")) {
-        detectedAppType = "inventory"
-      } else if (currentPath.includes("/todo0")) {
-        detectedAppType = "todo0"
-      } else if (currentPath.includes("/jarvis")) {
-        detectedAppType = "jarvis"
-      } else if (currentPath.includes("/agent0")) {
-        detectedAppType = "agent0"
-      } else if (currentPath.includes("/admin") || currentPath.includes("/users")) {
-        detectedAppType = "agent0"
-      } else {
-        detectedAppType = "inventory"
+    try {
+      let detectedAppType = appType
+      if (!detectedAppType) {
+        const currentPath = window.location.pathname
+        if (currentPath.includes("/jarvis")) {
+          detectedAppType = "jarvis"
+        } else if (currentPath.includes("/inventory")) {
+          detectedAppType = "inventory"
+        } else {
+          detectedAppType = "jarvis"
+        }
       }
-    }
 
-    const isJarvisApp = detectedAppType === "jarvis"
-    const isAgent0App = detectedAppType === "agent0" || isJarvisApp
-    const isInventoryApp = detectedAppType === "inventory"
-    const isTodo0App = detectedAppType === "todo0"
+      console.log("[v0] Starting sign in for app type:", detectedAppType)
 
-    const clientId = isJarvisApp
-      ? process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
-      : isAgent0App
-        ? process.env.NEXT_PUBLIC_OKTA_AGENT0_CLIENT_ID
-        : isInventoryApp
-          ? process.env.NEXT_PUBLIC_OKTA_INVENTORY_CLIENT_ID || process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID // Fallback to JARVIS
-          : process.env.NEXT_PUBLIC_OKTA_TODO_CLIENT_ID
+      const auth = initializeOktaAuth(detectedAppType)
+      if (!auth) {
+        console.error("[v0] Failed to initialize Okta Auth")
+        return
+      }
 
-    const state = isJarvisApp ? "jarvis" : isAgent0App ? "agent0" : isInventoryApp ? "inventory" : "todo0"
-
-    const issuer = process.env.NEXT_PUBLIC_OKTA_ISSUER
-    const redirectUri = `${window.location.origin}/callback`
-
-    if (!clientId || !issuer) {
-      console.error("Missing Okta configuration", {
-        clientId: clientId ? "present" : "missing",
-        issuer: issuer ? "present" : "missing",
-        appType: detectedAppType,
-        availableEnvVars: {
-          jarvis: process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID ? "present" : "missing",
-          inventory: process.env.NEXT_PUBLIC_OKTA_INVENTORY_CLIENT_ID ? "present" : "missing",
-        },
+      await auth.signInWithRedirect({
+        state: detectedAppType,
       })
-      return
+    } catch (error) {
+      console.error("[v0] Sign in failed:", error)
     }
-
-    const nonce = Math.random().toString(36).substring(2, 15)
-
-    const codeVerifier = generateCodeVerifier()
-    const codeChallenge = await generateCodeChallenge(codeVerifier)
-
-    localStorage.setItem("okta_state", state)
-    localStorage.setItem("okta_nonce", nonce)
-    localStorage.setItem("pkce_code_verifier", codeVerifier)
-
-    const authServerUrls = getAuthServerUrls(issuer)
-    const authUrl = new URL(authServerUrls.authorize)
-    authUrl.searchParams.set("client_id", clientId)
-    authUrl.searchParams.set("response_type", "code")
-    authUrl.searchParams.set("scope", "openid profile email")
-    authUrl.searchParams.set("redirect_uri", redirectUri)
-    authUrl.searchParams.set("state", state)
-    authUrl.searchParams.set("nonce", nonce)
-    authUrl.searchParams.set("code_challenge", codeChallenge)
-    authUrl.searchParams.set("code_challenge_method", "S256")
-
-    console.log("[v0] Starting OAuth with PKCE:", { clientId, state, redirectUri, hasPKCE: true })
-    window.location.href = authUrl.toString()
   }
 
   const signOut = async () => {
-    localStorage.removeItem("okta_access_token")
-    localStorage.removeItem("okta_tokens")
-    localStorage.removeItem("okta_state")
-    localStorage.removeItem("okta_nonce")
-    localStorage.removeItem("jarvis-tokens")
-    localStorage.removeItem("pkce_code_verifier")
-    setUser(null)
+    try {
+      localStorage.removeItem("okta_access_token")
+      localStorage.removeItem("okta_tokens")
+      localStorage.removeItem("okta_state")
+      localStorage.removeItem("okta_nonce")
+      localStorage.removeItem("jarvis-tokens")
+      localStorage.removeItem("pkce_code_verifier")
+      setUser(null)
 
-    console.log("[v0] Logout: Cleared all tokens and user state")
+      console.log("[v0] Logout: Cleared all tokens and user state")
 
-    const issuer = process.env.NEXT_PUBLIC_OKTA_ISSUER
-    if (issuer) {
-      const authServerUrls = getAuthServerUrls(issuer)
-      const logoutUrl = `${authServerUrls.logout}?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`
-      console.log("[v0] Redirecting to Okta logout:", logoutUrl)
-      window.location.href = logoutUrl
-    } else {
-      console.log("[v0] No issuer configured, redirecting to home")
+      if (oktaAuth) {
+        await oktaAuth.signOut()
+      } else {
+        // Fallback to manual logout
+        const issuer = process.env.NEXT_PUBLIC_OKTA_ISSUER || "https://fcxdemo.okta.com"
+        const logoutUrl = `${issuer}/oauth2/v1/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`
+        window.location.href = logoutUrl
+      }
+    } catch (error) {
+      console.error("[v0] Sign out failed:", error)
       window.location.href = "/"
     }
   }
