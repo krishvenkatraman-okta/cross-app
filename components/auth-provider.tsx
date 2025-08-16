@@ -32,6 +32,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkAuthStatus = async () => {
     try {
+      console.log("[v0] === AUTH STATUS CHECK START ===")
+      console.log("[v0] All localStorage keys:", Object.keys(localStorage))
+      console.log("[v0] localStorage contents:", {
+        okta_tokens: localStorage.getItem("okta_tokens"),
+        okta_access_token: localStorage.getItem("okta_access_token"),
+        jarvis_tokens: localStorage.getItem("jarvis-tokens"),
+      })
+
       const tokensJson = localStorage.getItem("okta_tokens")
       let token = null
 
@@ -39,10 +47,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const tokens = JSON.parse(tokensJson)
           token = tokens.access_token || tokens.id_token
-          console.log("[v0] Found tokens in okta_tokens:", token ? "present" : "missing")
+          console.log("[v0] Found tokens in okta_tokens:", {
+            hasAccessToken: !!tokens.access_token,
+            hasIdToken: !!tokens.id_token,
+            tokenType: tokens.token_type,
+            selectedToken: token ? "present" : "missing",
+          })
         } catch (e) {
-          console.error("Failed to parse stored tokens:", e)
+          console.error("[v0] Failed to parse stored tokens:", e)
         }
+      } else {
+        console.log("[v0] No okta_tokens found in localStorage")
       }
 
       if (!token) {
@@ -51,12 +66,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (token) {
+        console.log("[v0] Token found, proceeding with validation")
         await validateToken(token)
       } else {
         console.log("[v0] No valid tokens found, user needs to login")
       }
+      console.log("[v0] === AUTH STATUS CHECK END ===")
     } catch (error) {
-      console.error("Auth check failed:", error)
+      console.error("[v0] Auth check failed:", error)
     } finally {
       setIsLoading(false)
     }
