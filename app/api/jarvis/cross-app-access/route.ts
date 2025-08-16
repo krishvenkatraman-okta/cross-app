@@ -1,5 +1,4 @@
 import { type NextRequest, NextResponse } from "next/server"
-import crypto from "crypto"
 
 export async function POST(request: NextRequest) {
   try {
@@ -61,40 +60,36 @@ export async function POST(request: NextRequest) {
     console.log("[v0] Extracted Okta domain from ID token:", oktaDomain)
     console.log("[v0] Using dynamic token endpoint:", dynamicTokenEndpoint)
 
-    const audienceUrl =
-      target_app === "inventory"
-        ? `${request.nextUrl.origin}/api/inventory/oauth2` // Inventory app's authorization server URL
-        : `https://auth.${target_app}.com/`
+    const audienceUrl = process.env.NEXT_PUBLIC_OKTA_AUDIENCE || "http://localhost:5001"
 
     const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
-    if (!clientId) {
-      return NextResponse.json({ error: "Missing JARVIS client ID configuration" }, { status: 500 })
-    }
+    const clientSecret = process.env.OKTA_JARVIS_CLIENT_SECRET
 
-    const clientAssertion = await generateClientAssertion(clientId, dynamicTokenEndpoint)
+    if (!clientId || !clientSecret) {
+      return NextResponse.json({ error: "Missing JARVIS client credentials configuration" }, { status: 500 })
+    }
 
     console.log("[v0] Making ID-JAG token exchange request to Okta:", dynamicTokenEndpoint)
     console.log("[v0] Using client ID:", clientId)
+    console.log("[v0] Using audience:", audienceUrl)
     console.log("[v0] Token exchange parameters:", {
       grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
       requested_token_type: "urn:ietf:params:oauth:token-type:id-jag",
       audience: audienceUrl,
       subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
       subject_token_length: idToken.length,
-      subject_token_preview: idToken.substring(0, 100) + "...",
-      client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-      client_assertion_length: clientAssertion.length,
-      client_assertion_preview: clientAssertion.substring(0, 50) + "...",
+      client_id: clientId,
+      client_secret: "***", // Don't log the actual secret
     })
 
     const requestBody = new URLSearchParams({
       grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
       requested_token_type: "urn:ietf:params:oauth:token-type:id-jag",
-      audience: audienceUrl,
       subject_token: idToken,
       subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
-      client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-      client_assertion: clientAssertion,
+      audience: audienceUrl,
+      client_id: clientId,
+      client_secret: clientSecret,
     })
 
     console.log("[v0] Request body parameters:", Array.from(requestBody.keys()))
@@ -133,16 +128,18 @@ export async function POST(request: NextRequest) {
     }
 
     const idJagToken = await idJagResponse.json()
-    console.log("[v0] ID-JAG token obtained from Okta")
+    console.log("[v0] ID-JAG token obtained from Okta:", {
+      issued_token_type: idJagToken.issued_token_type,
+      token_type: idJagToken.token_type,
+      expires_in: idJagToken.expires_in,
+    })
 
     const tokenEndpoint =
       target_app === "inventory"
         ? `${request.nextUrl.origin}/api/inventory/oauth2/token`
         : `${request.nextUrl.origin}/api/${target_app}/oauth2/token`
 
-    const clientCredentials = Buffer.from(
-      `${clientId}:${process.env.OKTA_JARVIS_CLIENT_SECRET || "jarvis-secret"}`,
-    ).toString("base64")
+    const clientCredentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64")
 
     const accessTokenResponse = await fetch(tokenEndpoint, {
       method: "POST",
@@ -195,28 +192,4 @@ export async function POST(request: NextRequest) {
     console.error("[v0] Cross-app access error:", error)
     return NextResponse.json({ error: "Failed to obtain cross-app access" }, { status: 500 })
   }
-}
-
-async function generateClientAssertion(clientId: string, audience: string) {
-  const now = Math.floor(Date.now() / 1000)
-
-  const claims = {
-    iss: clientId,
-    sub: clientId,
-    aud: audience,
-    iat: now,
-    exp: now + 300,
-    jti: crypto.randomUUID(),
-  }
-
-  const header = { alg: "HS256", typ: "JWT" }
-  const encodedHeader = Buffer.from(JSON.stringify(header)).toString("base64url")
-  const encodedPayload = Buffer.from(JSON.stringify(claims)).toString("base64url")
-
-  const secret = process.env.OKTA_JARVIS_CLIENT_SECRET || "demo-jarvis-secret"
-  console.log("[v0] Using JARVIS client secret for client assertion")
-
-  const signature = crypto.createHmac("sha256", secret).update(`${encodedHeader}.${encodedPayload}`).digest("base64url")
-
-  return `${encodedHeader}.${encodedPayload}.${signature}`
 }
