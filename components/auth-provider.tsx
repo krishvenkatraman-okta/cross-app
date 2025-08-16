@@ -28,7 +28,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     checkAuthStatus()
-  }, [])
+
+    const interval = setInterval(() => {
+      // If user is set but no tokens exist, clear the user
+      if (user) {
+        const tokensJson = localStorage.getItem("okta_tokens")
+        const accessToken = localStorage.getItem("okta_access_token")
+
+        if (!tokensJson && !accessToken) {
+          console.log("[v0] Tokens cleared but user still set, clearing user state")
+          setUser(null)
+        }
+      }
+    }, 1000) // Check every second
+
+    return () => clearInterval(interval)
+  }, [user])
 
   const checkAuthStatus = async () => {
     try {
