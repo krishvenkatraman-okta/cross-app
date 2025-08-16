@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { getAuthServerUrls } from "@/lib/okta-config"
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,12 +33,16 @@ export async function POST(request: NextRequest) {
     const protocol = request.headers.get("x-forwarded-proto") || "https"
     const redirectUri = `${protocol}://${host}/callback`
 
-    const tokenEndpoint = `${process.env.NEXT_PUBLIC_OKTA_ISSUER}/oauth2/v1/token`
+    const authServerUrls = getAuthServerUrls()
+    const tokenEndpoint = authServerUrls.token
+    const userinfoEndpoint = authServerUrls.userinfo
+
     const authHeader = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`
 
     console.log("[v0] Token exchange details:", {
       issuer: process.env.NEXT_PUBLIC_OKTA_ISSUER,
       tokenEndpoint,
+      userinfoEndpoint,
       redirectUri,
       clientId,
       clientSecretLength: clientSecret?.length,
@@ -80,11 +85,12 @@ export async function POST(request: NextRequest) {
     const tokens = await tokenResponse.json()
     console.log("[v0] Token exchange successful:", {
       hasAccessToken: !!tokens.access_token,
+      hasIdToken: !!tokens.id_token,
       tokenType: tokens.token_type,
     })
 
     // Get user info
-    const userResponse = await fetch(`${process.env.NEXT_PUBLIC_OKTA_ISSUER}/oauth2/v1/userinfo`, {
+    const userResponse = await fetch(userinfoEndpoint, {
       headers: {
         Authorization: `Bearer ${tokens.access_token}`,
       },
