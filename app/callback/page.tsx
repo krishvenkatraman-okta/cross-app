@@ -13,13 +13,13 @@ export default function CallbackPage() {
       try {
         const code = searchParams.get("code")
         const state = searchParams.get("state")
-        const error = searchParams.get("error")
+        const errorParam = searchParams.get("error")
 
         console.log("[v0] Processing OAuth callback...")
 
-        if (error) {
-          console.error("[v0] OAuth error:", error)
-          setError(`Authentication failed: ${error}`)
+        if (errorParam) {
+          console.error("[v0] OAuth error:", errorParam)
+          setError(`Authentication failed: ${errorParam}`)
           return
         }
 
@@ -43,6 +43,10 @@ export default function CallbackPage() {
         console.log("[v0] Exchanging authorization code for tokens...")
         console.log("[v0] Using auth server:", authServer)
         console.log("[v0] Using client ID:", clientId)
+        console.log("[v0] Token endpoint URL:", `${authServer}/token`)
+        console.log("[v0] Redirect URI:", redirectUri)
+        console.log("[v0] Authorization code:", code?.substring(0, 10) + "...")
+        console.log("[v0] Code verifier:", codeVerifier?.substring(0, 10) + "...")
 
         const tokenResponse = await fetch(`${authServer}/token`, {
           method: "POST",
@@ -58,7 +62,16 @@ export default function CallbackPage() {
 
         if (!tokenResponse.ok) {
           const errorText = await tokenResponse.text()
-          console.error("[v0] Token exchange failed:", errorText)
+          console.error("[v0] Token exchange failed with status:", tokenResponse.status)
+          console.error("[v0] Token exchange error response:", errorText)
+          console.error("[v0] Request URL was:", `${authServer}/token`)
+          console.error("[v0] Request body was:", {
+            grant_type: "authorization_code",
+            client_id: clientId,
+            code: code?.substring(0, 10) + "...",
+            redirect_uri: redirectUri,
+            code_verifier: codeVerifier?.substring(0, 10) + "...",
+          })
           throw new Error(`Token exchange failed: ${errorText}`)
         }
 
