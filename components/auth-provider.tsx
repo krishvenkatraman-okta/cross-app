@@ -2,20 +2,7 @@
 
 import type React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
-
-interface OktaAuth {
-  signInWithRedirect: (options?: any) => Promise<void>
-  handleLoginRedirect: () => Promise<void>
-  getUser: () => Promise<any>
-  getAccessToken: () => string | undefined
-  getIdToken: () => string | undefined
-  isAuthenticated: () => Promise<boolean>
-  signOut: () => Promise<void>
-  tokenManager: {
-    get: (key: string) => Promise<any>
-    on: (event: string, callback: Function) => void
-  }
-}
+import { generateCodeVerifier, generateCodeChallenge } from "../utils/pkce"
 
 interface User {
   id: string
@@ -34,50 +21,6 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
-
-let oktaAuth: OktaAuth | null = null
-let initPromise: Promise<OktaAuth | null> | null = null
-
-const initializeOktaAuth = async (appType = "jarvis"): Promise<OktaAuth | null> => {
-  if (typeof window === "undefined") return null
-
-  if (initPromise) return initPromise
-
-  if (oktaAuth) return oktaAuth
-
-  initPromise = (async () => {
-    try {
-      const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
-      const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER || "https://fcxdemo.okta.com/oauth2/v1"
-      const issuer = authServer.replace("/oauth2/v1", "")
-
-      if (!clientId || !issuer) {
-        console.error("[v0] Missing Okta configuration for", appType)
-        return null
-      }
-
-      const { OktaAuth } = await import("@okta/okta-auth-js")
-
-      oktaAuth = new OktaAuth({
-        issuer,
-        clientId,
-        redirectUri: `${window.location.origin}/callback`,
-        scopes: ["openid", "profile", "email"],
-        pkce: true,
-        responseType: "code",
-        state: appType,
-      })
-
-      console.log("[v0] Okta Auth initialized for", appType, "with PKCE enabled")
-      return oktaAuth
-    } catch (error) {
-      console.error("[v0] Failed to initialize Okta Auth:", error)
-      return null
-    }
-  })()
-
-  return initPromise
-}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -128,40 +71,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const handleCallback = async () => {
     try {
-      const auth = await initializeOktaAuth("jarvis")
+      const urlParams = new URLSearchParams(window.location.search)
+      const code = urlParams.get("code")
+      const state = urlParams.get("state")
+      const codeVerifier = localStorage.getItem("pkce_code_verifier")
 
-      if (auth) {
-        console.log("[v0] Handling login redirect with okta-auth-js")
-        await auth.handleLoginRedirect()
+      if (!code || !codeVerifier) {
+        throw new Error("Missing authorization code or code verifier")
+      }
 
-        const isAuthenticated = await auth.isAuthenticated()
-        if (isAuthenticated) {
-          const userInfo = await auth.getUser()
-          const idToken = auth.getIdToken()
-          const accessToken = auth.getAccessToken()
+      console.log("[v0] Exchanging authorization code for tokens")
 
-          const tokens = {
-            id_token: idToken,
-            access_token: accessToken,
-            token_type: "Bearer",
-          }
-          localStorage.setItem("okta_tokens", JSON.stringify(tokens))
+      const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER || "https://fcxdemo.okta.com/oauth2/v1"
+      const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
 
-          const userData = {
-            id: userInfo.sub,
-            email: userInfo.email || userInfo.preferred_username,
-            name:
-              userInfo.name || `${userInfo.given_name || ""} ${userInfo.family_name || ""}`.trim() || userInfo.email,
-            groups: userInfo.groups || ["user"],
-          }
+      const tokenResponse = await fetch(`${authServer}/token`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          client_id: clientId!,
+          code,
+          redirect_uri: `${window.location.origin}/callback`,
+          code_verifier: codeVerifier,
+        }),
+      })
 
-          setUser(userData)
-          console.log("[v0] Authentication successful, user set:", userData.email)
+      if (!tokenResponse.ok) {
+        const errorText = await tokenResponse.text()
+        throw new Error(`Token exchange failed: ${errorText}`)
+      }
 
-          const state = new URLSearchParams(window.location.search).get("state")
-          const redirectPath = state === "jarvis" ? "/jarvis" : state === "inventory" ? "/inventory" : "/"
-          window.location.href = redirectPath
+      const tokens = await tokenResponse.json()
+
+      localStorage.setItem("okta_tokens", JSON.stringify(tokens))
+      localStorage.removeItem("pkce_code_verifier")
+
+      if (tokens.id_token) {
+        const payload = JSON.parse(atob(tokens.id_token.split(".")[1]))
+        const userData = {
+          id: payload.sub,
+          email: payload.email || payload.preferred_username,
+          name: payload.name || `${payload.given_name || ""} ${payload.family_name || ""}`.trim() || payload.email,
+          groups: payload.groups || ["user"],
         }
+
+        setUser(userData)
+        console.log("[v0] Authentication successful, user set:", userData.email)
+
+        const redirectPath = state === "jarvis" ? "/jarvis" : state === "inventory" ? "/inventory" : "/"
+        window.location.href = redirectPath
       }
     } catch (error) {
       console.error("[v0] Callback handling failed:", error)
@@ -185,15 +146,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log("[v0] Starting sign in for app type:", detectedAppType)
 
-      const auth = await initializeOktaAuth(detectedAppType)
-      if (!auth) {
-        console.error("[v0] Failed to initialize Okta Auth")
-        return
+      const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER || "https://fcxdemo.okta.com/oauth2/v1"
+      const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
+
+      if (!clientId) {
+        throw new Error("Missing client ID")
       }
 
-      await auth.signInWithRedirect({
-        state: detectedAppType,
-      })
+      const codeVerifier = generateCodeVerifier()
+      const codeChallenge = await generateCodeChallenge(codeVerifier)
+
+      localStorage.setItem("pkce_code_verifier", codeVerifier)
+
+      const authUrl = new URL(`${authServer}/authorize`)
+      authUrl.searchParams.set("client_id", clientId)
+      authUrl.searchParams.set("response_type", "code")
+      authUrl.searchParams.set("scope", "openid profile email")
+      authUrl.searchParams.set("redirect_uri", `${window.location.origin}/callback`)
+      authUrl.searchParams.set("state", detectedAppType)
+      authUrl.searchParams.set("code_challenge", codeChallenge)
+      authUrl.searchParams.set("code_challenge_method", "S256")
+
+      console.log("[v0] Redirecting to Okta for authentication")
+      window.location.href = authUrl.toString()
     } catch (error) {
       console.error("[v0] Sign in failed:", error)
     }
@@ -211,14 +186,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log("[v0] Logout: Cleared all tokens and user state")
 
-      if (oktaAuth) {
-        await oktaAuth.signOut()
-      } else {
-        const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER || "https://fcxdemo.okta.com/oauth2/v1"
-        const baseDomain = authServer.replace("/oauth2/v1", "")
-        const logoutUrl = `${baseDomain}/login/signout?fromURI=${encodeURIComponent(window.location.origin)}`
-        window.location.href = logoutUrl
-      }
+      const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER || "https://fcxdemo.okta.com/oauth2/v1"
+      const baseDomain = authServer.replace("/oauth2/v1", "")
+      const logoutUrl = `${baseDomain}/login/signout?fromURI=${encodeURIComponent(window.location.origin)}`
+      window.location.href = logoutUrl
     } catch (error) {
       console.error("[v0] Sign out failed:", error)
       window.location.href = "/"
