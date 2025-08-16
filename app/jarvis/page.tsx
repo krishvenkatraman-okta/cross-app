@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { useAuth } from "@/components/auth-provider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
@@ -13,247 +12,163 @@ interface Message {
   timestamp: string
 }
 
-interface TokenInfo {
-  access_token: string
-  refresh_token?: string
-  id_token?: string
-  id_jag_token?: string
-  todo_access_token?: string
-  token_type: string
-  expires_in: number
-  scope: string
-  success?: boolean
-}
-
-function TokenCard({ title, token, type, usage }: { title: string; token: string; type: string; usage: string }) {
-  const [copied, setCopied] = useState(false)
-  const [expanded, setExpanded] = useState(false)
-
-  const copyToken = () => {
-    navigator.clipboard.writeText(token)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  const toggleExpanded = () => {
-    setExpanded(!expanded)
-  }
-
-  return (
-    <Card className="p-4 border border-gray-200">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="font-semibold text-gray-900">{title}</h3>
-        <div className="flex gap-1">
-          <Button onClick={toggleExpanded} variant="ghost" size="sm" className="text-purple-600 hover:text-purple-700">
-            {expanded ? "👁" : "👁‍🗨"}
-          </Button>
-          <Button onClick={copyToken} variant="ghost" size="sm" className="text-purple-600 hover:text-purple-700">
-            {copied ? "✓" : "📋"}
-          </Button>
-        </div>
-      </div>
-
-      <div className="bg-gray-50 rounded p-3 mb-3">
-        <code className="text-xs text-gray-700 break-all">{expanded ? token : `${token.substring(0, 50)}...`}</code>
-      </div>
-
-      <div className="text-xs text-gray-500">
-        <p>
-          <strong>Type:</strong> {type}
-        </p>
-        <p>
-          <strong>Used for:</strong> {usage}
-        </p>
-      </div>
-    </Card>
-  )
+interface AuthState {
+  isAuthenticated: boolean
+  user: { email: string; name: string } | null
+  idToken: string | null
 }
 
 export default function JarvisPage() {
-  const { user, signIn, signOut, isLoading } = useAuth()
+  const [authState, setAuthState] = useState<AuthState>({
+    isAuthenticated: false,
+    user: null,
+    idToken: null,
+  })
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
-  const [tokens, setTokens] = useState<TokenInfo | null>(null)
-  const [showTokens, setShowTokens] = useState(false)
-  const [isLoadingTokens, setIsLoadingTokens] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!isLoading && !user) {
-      console.log("[v0] No authenticated user found, starting OAuth flow")
-      signIn("jarvis")
+    const checkAuth = () => {
+      console.log("[v0] Checking authentication state...")
+
+      const storedTokens = localStorage.getItem("okta_tokens")
+      if (storedTokens) {
+        try {
+          const tokens = JSON.parse(storedTokens)
+          if (tokens.id_token) {
+            // Decode ID token to get user info
+            const payload = JSON.parse(atob(tokens.id_token.split(".")[1]))
+            console.log("[v0] Found valid ID token for user:", payload.email)
+
+            setAuthState({
+              isAuthenticated: true,
+              user: { email: payload.email, name: payload.name || payload.email },
+              idToken: tokens.id_token,
+            })
+
+            setMessages([
+              {
+                id: "welcome",
+                role: "assistant",
+                content:
+                  "Hello! I'm JARVIS, your AI assistant. I can help you manage your inventory and answer questions. Try asking me 'What's in my Texas inventory?' or 'Show me California warehouse stock'.",
+                timestamp: new Date().toISOString(),
+              },
+            ])
+          }
+        } catch (error) {
+          console.error("[v0] Error parsing stored tokens:", error)
+          localStorage.removeItem("okta_tokens")
+        }
+      }
+
+      setIsLoading(false)
     }
-  }, [user, isLoading, signIn])
 
-  const performTokenExchange = async (
-    idToken: string,
-  ): Promise<{ id_jag_token: string; inventory_access_token: string } | null> => {
+    checkAuth()
+  }, [])
+
+  const signIn = () => {
+    console.log("[v0] Starting OAuth sign-in...")
+
+    const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
+    const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER
+    const redirectUri = `${window.location.origin}/callback`
+
+    const authUrl =
+      `${authServer}/oauth2/v1/authorize?` +
+      new URLSearchParams({
+        client_id: clientId!,
+        response_type: "code",
+        scope: "openid profile email",
+        redirect_uri: redirectUri,
+        state: "jarvis",
+      })
+
+    console.log("[v0] Redirecting to Okta:", authUrl)
+    window.location.href = authUrl
+  }
+
+  const signOut = () => {
+    console.log("[v0] Signing out...")
+    localStorage.removeItem("okta_tokens")
+    setAuthState({ isAuthenticated: false, user: null, idToken: null })
+    setMessages([])
+
+    // Redirect to Okta logout
+    const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER
+    const logoutUrl = `${authServer}/oauth2/v1/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`
+    window.location.href = logoutUrl
+  }
+
+  const performTokenExchange = async (idToken: string) => {
     try {
-      console.log("[v0] Client-side token exchange request")
-      console.log("[v0] ID token length:", idToken.length)
-      console.log("[v0] ID token starts with:", idToken.substring(0, 50) + "...")
+      console.log("[v0] Starting token exchange with ID token...")
 
-      try {
-        const tokenHeader = JSON.parse(atob(idToken.split(".")[0]))
-        const tokenPayload = JSON.parse(atob(idToken.split(".")[1]))
-        console.log("[v0] ID token header:", tokenHeader)
-        console.log("[v0] ID token payload:", {
-          iss: tokenPayload.iss,
-          aud: tokenPayload.aud,
-          sub: tokenPayload.sub,
-          exp: tokenPayload.exp,
-          iat: tokenPayload.iat,
-          expired: tokenPayload.exp < Math.floor(Date.now() / 1000),
-        })
+      // Extract Okta domain from ID token
+      const payload = JSON.parse(atob(idToken.split(".")[1]))
+      const oktaDomain = payload.iss
 
-        const oktaDomain = tokenPayload.iss
-        console.log("[v0] Extracted Okta domain from ID token:", oktaDomain)
+      console.log("[v0] Making ID-JAG token exchange request...")
+      const jagResponse = await fetch(`${oktaDomain}/oauth2/v1/token`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+          requested_token_type: "urn:ietf:params:oauth:token-type:id-jag",
+          audience: process.env.NEXT_PUBLIC_OKTA_AUDIENCE!,
+          subject_token: idToken,
+          subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
+          client_id: process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID!,
+        }),
+      })
 
-        const tokenEndpoint = `${oktaDomain}/oauth2/v1/token`
-        console.log("[v0] Using dynamic token endpoint:", tokenEndpoint)
+      if (!jagResponse.ok) {
+        const error = await jagResponse.text()
+        console.error("[v0] ID-JAG exchange failed:", error)
+        throw new Error(`JAG token exchange failed: ${error}`)
+      }
 
-        console.log("[v0] Making ID-JAG token exchange request to Okta:", tokenEndpoint)
-        console.log("[v0] Using client ID:", process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID)
-        console.log("[v0] Using audience:", process.env.NEXT_PUBLIC_OKTA_AUDIENCE)
-        console.log("[v0] Making token exchange request to match working curl format")
+      const jagResult = await jagResponse.json()
+      console.log("[v0] ID-JAG token exchange successful")
 
-        const tokenExchangeResponse = await fetch(tokenEndpoint, {
-          method: "POST",
-          credentials: "include", // Include cookies to maintain session context
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: new URLSearchParams({
-            grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
-            requested_token_type: "urn:ietf:params:oauth:token-type:id-jag",
-            audience: process.env.NEXT_PUBLIC_OKTA_AUDIENCE || "http://localhost:5001",
-            subject_token: idToken,
-            subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
-            client_id: process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID!,
-            // Note: client_secret cannot be used in browser for security
-          }),
-        })
+      // Exchange JAG token for inventory access token
+      console.log("[v0] Making inventory token exchange request...")
+      const inventoryResponse = await fetch("/api/inventory/oauth2/token", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+          assertion: jagResult.access_token,
+        }),
+      })
 
-        if (!tokenExchangeResponse.ok) {
-          const errorText = await tokenExchangeResponse.text()
-          console.error("[v0] ID-JAG exchange failed:", {
-            status: tokenExchangeResponse.status,
-            statusText: tokenExchangeResponse.statusText,
-            body: errorText,
-          })
-          return null
-        }
+      if (!inventoryResponse.ok) {
+        const error = await inventoryResponse.text()
+        console.error("[v0] Inventory token exchange failed:", error)
+        throw new Error(`Inventory token exchange failed: ${error}`)
+      }
 
-        const tokenExchangeResult = await tokenExchangeResponse.json()
-        console.log("[v0] ID-JAG token exchange successful")
+      const inventoryResult = await inventoryResponse.json()
+      console.log("[v0] Inventory token exchange successful")
 
-        const inventoryTokenResponse = await fetch("/api/inventory/oauth2/token", {
-          method: "POST",
-          credentials: "include", // Maintain session context
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: new URLSearchParams({
-            grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-            assertion: tokenExchangeResult.access_token,
-          }),
-        })
-
-        if (!inventoryTokenResponse.ok) {
-          const errorText = await inventoryTokenResponse.text()
-          console.error("[v0] Inventory token exchange failed:", inventoryTokenResponse.status, errorText)
-          return null
-        }
-
-        const inventoryTokenResult = await inventoryTokenResponse.json()
-        console.log("[v0] Inventory token exchange successful")
-
-        return {
-          id_jag_token: tokenExchangeResult.access_token,
-          inventory_access_token: inventoryTokenResult.access_token,
-        }
-      } catch (decodeError) {
-        console.error("[v0] Failed to decode ID token:", decodeError)
-        return null
+      return {
+        jagToken: jagResult.access_token,
+        inventoryToken: inventoryResult.access_token,
       }
     } catch (error) {
-      console.error("[v0] Client-side token exchange error:", error)
+      console.error("[v0] Token exchange error:", error)
       return null
     }
   }
 
-  const loadTokens = async () => {
-    setIsLoadingTokens(true)
-    try {
-      console.log("[v0] JARVIS checking localStorage keys...")
-      console.log("[v0] All localStorage keys:", Object.keys(localStorage))
-
-      const storedOktaTokens = localStorage.getItem("okta_tokens")
-      const storedJarvisTokens = localStorage.getItem("jarvis-tokens")
-
-      console.log("[v0] okta_tokens:", storedOktaTokens)
-      console.log("[v0] jarvis-tokens:", storedJarvisTokens)
-
-      if (!storedOktaTokens && !storedJarvisTokens) {
-        console.log("[v0] No tokens found in localStorage")
-        setTokens(null)
-        return
-      }
-
-      let allTokens: any = {
-        token_type: "Bearer",
-        expires_in: 3600,
-        scope: "openid profile email",
-      }
-
-      // Load original Okta tokens from callback
-      if (storedOktaTokens) {
-        const oktaTokens = JSON.parse(storedOktaTokens)
-        console.log("[v0] Parsed okta_tokens:", oktaTokens)
-        allTokens = { ...allTokens, ...oktaTokens }
-      }
-
-      if (storedJarvisTokens) {
-        const jarvisTokens = JSON.parse(storedJarvisTokens)
-        console.log("[v0] Parsed jarvis-tokens:", jarvisTokens)
-
-        // Only include tokens that were actually granted (not failed attempts)
-        if (jarvisTokens.success !== false) {
-          allTokens = { ...allTokens, ...jarvisTokens }
-        } else {
-          console.log("[v0] Skipping failed JARVIS tokens")
-        }
-      }
-
-      console.log("[v0] JARVIS final loaded tokens:", allTokens)
-      setTokens(allTokens)
-    } catch (error) {
-      console.error("Failed to load tokens:", error)
-      setTokens(null)
-    } finally {
-      setIsLoadingTokens(false)
-    }
-  }
-
-  useEffect(() => {
-    if (user) {
-      setMessages([
-        {
-          id: "welcome",
-          role: "assistant",
-          content:
-            "Hello! I'm JARVIS, your AI assistant. I can help you manage your inventory and answer questions. Try asking me 'What's in my Texas inventory?' or 'Show me California warehouse stock'.",
-          timestamp: new Date().toISOString(),
-        },
-      ])
-      loadTokens()
-    }
-  }, [user])
-
   const sendMessage = async () => {
-    if (!input.trim() || isGenerating) return
+    if (!input.trim() || isGenerating || !authState.idToken) return
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -267,98 +182,51 @@ export default function JarvisPage() {
     setIsGenerating(true)
 
     try {
-      console.log("[v0] JARVIS sending message:", userMessage.content)
+      // Check if this is an inventory query
+      const isInventoryQuery = /inventory|stock|warehouse|texas|california/i.test(userMessage.content)
 
-      const storedOktaTokens = localStorage.getItem("okta_tokens")
-      const authHeaders: any = {
-        "Content-Type": "application/json",
-        Cookie: document.cookie,
-      }
+      let inventoryData = null
+      if (isInventoryQuery) {
+        console.log("[v0] Inventory query detected, performing token exchange...")
+        const tokens = await performTokenExchange(authState.idToken)
 
-      let crossAppTokens = null
+        if (tokens) {
+          // Make inventory API call
+          const inventoryResponse = await fetch("/api/inventory", {
+            headers: {
+              Authorization: `Bearer ${tokens.inventoryToken}`,
+              "Content-Type": "application/json",
+            },
+          })
 
-      if (storedOktaTokens) {
-        const oktaTokens = JSON.parse(storedOktaTokens)
-        if (oktaTokens.id_token) {
-          authHeaders.Authorization = `Bearer ${oktaTokens.id_token}`
-          console.log(
-            "[v0] JARVIS sending ID token in Authorization header:",
-            oktaTokens.id_token.substring(0, 20) + "...",
-          )
-
-          crossAppTokens = await performTokenExchange(oktaTokens.id_token)
-          if (crossAppTokens) {
-            console.log("[v0] Client-side token exchange successful, sending tokens to server")
-          } else {
-            console.log("[v0] Client-side token exchange failed")
-          }
-
-          try {
-            const tokenParts = oktaTokens.id_token.split(".")
-            if (tokenParts.length === 3) {
-              const payload = JSON.parse(atob(tokenParts[1]))
-              console.log("[v0] Frontend ID token details:", {
-                issuer: payload.iss,
-                audience: payload.aud,
-                subject: payload.sub,
-                expires: payload.exp,
-                issuedAt: payload.iat,
-                expired: payload.exp < Math.floor(Date.now() / 1000),
-                tokenLength: oktaTokens.id_token.length,
-                tokenStart: oktaTokens.id_token.substring(0, 50),
-                tokenEnd: oktaTokens.id_token.substring(oktaTokens.id_token.length - 50),
-              })
-            }
-          } catch (error) {
-            console.log("[v0] Could not decode frontend ID token for debugging:", error)
+          if (inventoryResponse.ok) {
+            inventoryData = await inventoryResponse.json()
+            console.log("[v0] Successfully retrieved inventory data")
           }
         }
       }
 
-      const response = await fetch("/api/jarvis/chat", {
-        method: "POST",
-        headers: authHeaders,
-        body: JSON.stringify({
-          message: userMessage.content,
-          history: messages,
-          crossAppTokens: crossAppTokens, // Send client-side tokens to server
-        }),
-      })
-
-      console.log("[v0] JARVIS API response status:", response.status)
-
-      if (response.ok) {
-        const data = await response.json()
-
-        console.log("[v0] JARVIS API response data:", data)
-
-        if (data.tokens && data.success !== false) {
-          console.log("[v0] JARVIS storing successful tokens:", data.tokens)
-          setTokens((prev) => ({ ...prev, ...data.tokens }))
-          localStorage.setItem("jarvis-tokens", JSON.stringify({ ...data.tokens, success: true }))
-          setTimeout(() => loadTokens(), 100)
-        } else if (data.success === false) {
-          console.log("[v0] JARVIS token exchange failed, not storing tokens")
-          // Clear any failed token attempts
-          localStorage.setItem("jarvis-tokens", JSON.stringify({ success: false }))
-        }
-
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: data.message || data.response || "No response received",
-          timestamp: new Date().toISOString(),
-        }
-
-        console.log("[v0] JARVIS adding assistant message:", assistantMessage.content)
-        setMessages((prev) => [...prev, assistantMessage])
+      // Generate AI response
+      let responseContent = ""
+      if (inventoryData) {
+        responseContent = `Here's your inventory data:\n\n${JSON.stringify(inventoryData, null, 2)}`
+      } else if (isInventoryQuery) {
+        responseContent = "I'm sorry, I couldn't access the inventory data at the moment. Please try again."
       } else {
-        const errorText = await response.text()
-        console.error("[v0] JARVIS API error:", response.status, errorText)
-        throw new Error(`API error: ${response.status}`)
+        responseContent =
+          "I'm JARVIS, your AI assistant. I can help you with inventory queries. Try asking about your Texas or California warehouse stock!"
       }
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: responseContent,
+        timestamp: new Date().toISOString(),
+      }
+
+      setMessages((prev) => [...prev, assistantMessage])
     } catch (error) {
-      console.error("[v0] JARVIS chat error:", error)
+      console.error("[v0] Chat error:", error)
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
@@ -371,21 +239,10 @@ export default function JarvisPage() {
     }
   }
 
+  // Loading state
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 flex items-center justify-center p-4 relative overflow-hidden">
-        <div className="bg-slate-800/80 backdrop-blur-sm border border-blue-500/30 rounded-2xl shadow-2xl p-8 max-w-md w-full text-center relative z-10">
-          <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-blue-200">Checking authentication...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 flex items-center justify-center p-4 relative overflow-hidden">
-        {/* Large outer ring */}
         <div
           className="absolute w-[800px] h-[800px] border border-cyan-400/10 rounded-full animate-spin"
           style={{ animationDuration: "60s" }}
@@ -404,52 +261,44 @@ export default function JarvisPage() {
           ))}
         </div>
 
-        {/* Medium ring */}
-        <div
-          className="absolute w-[600px] h-[600px] border border-blue-400/15 rounded-full animate-spin"
-          style={{ animationDuration: "40s", animationDirection: "reverse" }}
-        >
-          {Array.from({ length: 24 }).map((_, i) => (
-            <div
-              key={i}
-              className="absolute w-1 h-8 bg-blue-400/20"
-              style={{
-                top: "20px",
-                left: "50%",
-                transformOrigin: "50% 280px",
-                transform: `translateX(-50%) rotate(${i * 15}deg)`,
-              }}
-            />
-          ))}
+        <div className="bg-slate-800/80 backdrop-blur-sm border border-blue-500/30 rounded-2xl shadow-2xl p-8 max-w-md w-full text-center relative z-10">
+          <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-blue-200">Loading JARVIS...</p>
         </div>
+      </div>
+    )
+  }
 
-        {/* Inner ring */}
+  // Authentication required
+  if (!authState.isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 flex items-center justify-center p-4 relative overflow-hidden">
         <div
-          className="absolute w-[400px] h-[400px] border border-yellow-400/20 rounded-full animate-spin"
-          style={{ animationDuration: "25s" }}
+          className="absolute w-[800px] h-[800px] border border-cyan-400/10 rounded-full animate-spin"
+          style={{ animationDuration: "60s" }}
         >
-          {Array.from({ length: 16 }).map((_, i) => (
+          {Array.from({ length: 32 }).map((_, i) => (
             <div
               key={i}
-              className={`absolute w-1 h-16 ${i % 3 === 0 ? "bg-yellow-400/40" : "bg-yellow-400/15"}`}
+              className={`absolute w-0.5 h-12 ${i % 4 === 0 ? "bg-cyan-400/30" : "bg-cyan-400/10"}`}
               style={{
-                top: "10px",
+                top: "0px",
                 left: "50%",
-                transformOrigin: "50% 190px",
-                transform: `translateX(-50%) rotate(${i * 22.5}deg)`,
+                transformOrigin: "50% 400px",
+                transform: `translateX(-50%) rotate(${i * 11.25}deg)`,
               }}
             />
           ))}
         </div>
 
         <div className="bg-slate-800/80 backdrop-blur-sm border border-blue-500/30 rounded-2xl shadow-2xl p-8 max-w-md w-full text-center relative z-10">
-          <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-blue-200 mb-4">Authentication required...</p>
+          <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-500/50">
+            <span className="text-2xl">🤖</span>
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-2">JARVIS</h1>
+          <p className="text-blue-200 mb-6">AI Assistant with Inventory Access</p>
           <Button
-            onClick={() => {
-              console.log("[v0] Manual sign-in button clicked")
-              signIn("jarvis")
-            }}
+            onClick={signIn}
             className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white py-3 shadow-lg shadow-blue-500/25 border-0"
           >
             Sign in with Okta
@@ -459,9 +308,9 @@ export default function JarvisPage() {
     )
   }
 
+  // Main chat interface
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 flex relative overflow-hidden">
-      {/* Large outer ring */}
       <div
         className="absolute w-[800px] h-[800px] border border-cyan-400/10 rounded-full animate-spin"
         style={{ animationDuration: "60s" }}
@@ -480,53 +329,7 @@ export default function JarvisPage() {
         ))}
       </div>
 
-      {/* Medium ring */}
-      <div
-        className="absolute w-[600px] h-[600px] border border-blue-400/15 rounded-full animate-spin"
-        style={{ animationDuration: "40s", animationDirection: "reverse" }}
-      >
-        {Array.from({ length: 24 }).map((_, i) => (
-          <div
-            key={i}
-            className="absolute w-1 h-8 bg-blue-400/20"
-            style={{
-              top: "20px",
-              left: "50%",
-              transformOrigin: "50% 280px",
-              transform: `translateX(-50%) rotate(${i * 15}deg)`,
-            }}
-          />
-        ))}
-      </div>
-
-      {/* Inner ring with segments */}
-      <div
-        className="absolute w-[400px] h-[400px] border border-yellow-400/20 rounded-full animate-spin"
-        style={{ animationDuration: "25s" }}
-      >
-        {Array.from({ length: 16 }).map((_, i) => (
-          <div
-            key={i}
-            className={`absolute w-1 h-16 ${i % 3 === 0 ? "bg-yellow-400/40" : "bg-yellow-400/15"}`}
-            style={{
-              top: "10px",
-              left: "50%",
-              transformOrigin: "50% 190px",
-              transform: `translateX(-50%) rotate(${i * 22.5}deg)`,
-            }}
-          />
-        ))}
-      </div>
-
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.03)_1px,transparent_1px)] bg-[size:50px_50px]"></div>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(59,130,246,0.1),transparent_50%)]"></div>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(34,197,94,0.05),transparent_50%)]"></div>
-      <div
-        className="absolute inset-0 bg-[conic-gradient(from_0deg_at_50%_50%,transparent_0deg,rgba(59,130,246,0.02)_60deg,transparent_120deg)] animate-spin"
-        style={{ animationDuration: "30s" }}
-      ></div>
-
-      <div className={`flex-1 transition-all duration-300 ${sidebarOpen ? "mr-96" : ""} relative z-10`}>
+      <div className="flex-1 relative z-10">
         <div className="max-w-4xl mx-auto p-4 h-screen flex flex-col">
           <div className="bg-slate-800/90 backdrop-blur-sm border border-blue-500/30 rounded-t-2xl shadow-lg shadow-blue-500/10 p-6 border-b border-blue-500/20">
             <div className="flex items-center justify-between">
@@ -539,26 +342,13 @@ export default function JarvisPage() {
                   <p className="text-sm text-blue-200">AI Assistant with Inventory Access</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  onClick={() => {
-                    console.log("[v0] Logout button clicked")
-                    signOut()
-                  }}
-                  variant="outline"
-                  className="bg-red-600/20 border-red-500/30 text-red-200 hover:bg-red-600/30 hover:text-white hover:border-red-400/50"
-                >
-                  Logout
-                </Button>
-                <Button
-                  onClick={() => setSidebarOpen(!sidebarOpen)}
-                  variant="outline"
-                  className="flex items-center gap-2 bg-slate-700/50 border-blue-500/30 text-blue-200 hover:bg-slate-600/50 hover:text-white hover:border-blue-400/50"
-                >
-                  <span>{sidebarOpen ? "▶" : "◀"}</span>
-                  {sidebarOpen ? "Hide" : "Show"} Tokens
-                </Button>
-              </div>
+              <Button
+                onClick={signOut}
+                variant="outline"
+                className="bg-red-600/20 border-red-500/30 text-red-200 hover:bg-red-600/30 hover:text-white hover:border-red-400/50"
+              >
+                Logout
+              </Button>
             </div>
           </div>
 
@@ -637,90 +427,11 @@ export default function JarvisPage() {
               </Button>
             </div>
             <p className="text-xs text-blue-300 mt-2 text-center">
-              Signed in as {user?.email || "Unknown User"} • JARVIS can access your Atlas Beverages Inventory data
+              Signed in as {authState.user?.email} • JARVIS can access your Atlas Beverages Inventory data
             </p>
           </div>
         </div>
       </div>
-
-      {sidebarOpen && (
-        <div className="fixed right-0 top-0 h-full w-96 bg-slate-800/95 backdrop-blur-sm shadow-2xl border-l border-blue-500/30 overflow-y-auto">
-          <div className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-white">OAuth Tokens</h2>
-              <Button
-                onClick={() => setSidebarOpen(false)}
-                variant="ghost"
-                size="sm"
-                className="text-blue-300 hover:text-white hover:bg-slate-700/50"
-              >
-                ✕
-              </Button>
-            </div>
-
-            {isLoadingTokens ? (
-              <div className="text-center py-8">
-                <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                <p className="text-blue-300">Loading tokens...</p>
-              </div>
-            ) : tokens ? (
-              <div className="space-y-4">
-                {tokens.access_token && (
-                  <TokenCard
-                    title="Access Token"
-                    token={tokens.access_token}
-                    type="Bearer Token"
-                    usage="JARVIS Authentication"
-                  />
-                )}
-
-                {tokens.id_token && (
-                  <TokenCard title="ID Token" token={tokens.id_token} type="JWT Token" usage="User Identity" />
-                )}
-
-                {tokens.id_jag_token && (
-                  <TokenCard
-                    title="ID-JAG Token"
-                    token={tokens.id_jag_token}
-                    type="ID Assertion JWT"
-                    usage="Cross-App Access"
-                  />
-                )}
-
-                {tokens.todo_access_token && (
-                  <TokenCard
-                    title="Inventory Access Token"
-                    token={tokens.todo_access_token}
-                    type="Bearer Token"
-                    usage="Atlas Beverages Inventory API Access"
-                  />
-                )}
-
-                {tokens.refresh_token && (
-                  <TokenCard
-                    title="Refresh Token"
-                    token={tokens.refresh_token}
-                    type="Refresh Token"
-                    usage="Token Renewal"
-                  />
-                )}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-blue-300 mb-4">No tokens available</p>
-                <Button
-                  onClick={loadTokens}
-                  variant="outline"
-                  size="sm"
-                  className="border-blue-500/30 text-blue-200 hover:bg-slate-700/50 bg-transparent"
-                >
-                  Refresh Tokens
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

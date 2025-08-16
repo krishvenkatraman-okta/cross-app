@@ -2,12 +2,10 @@
 
 import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useAuth } from "@/components/auth-provider"
 
 export default function CallbackPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { setUser } = useAuth()
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -17,133 +15,62 @@ export default function CallbackPage() {
         const state = searchParams.get("state")
         const error = searchParams.get("error")
 
-        console.log("[v0] === CALLBACK PROCESSING START ===")
-        console.log("[v0] URL search params:", { code: code?.substring(0, 10) + "...", state, error })
-        console.log("[v0] Current localStorage before callback:", {
-          okta_tokens: localStorage.getItem("okta_tokens"),
-          okta_access_token: localStorage.getItem("okta_access_token"),
-        })
+        console.log("[v0] Processing OAuth callback...")
 
         if (error) {
-          console.error("[v0] OAuth error received:", error)
+          console.error("[v0] OAuth error:", error)
           setError(`Authentication failed: ${error}`)
           return
         }
 
         if (!code) {
-          console.error("[v0] No authorization code received from Okta")
+          console.error("[v0] No authorization code received")
           setError("No authorization code received")
           return
         }
 
-        console.log("[v0] Making callback API request...")
+        const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
+        const clientSecret = process.env.OKTA_JARVIS_CLIENT_SECRET
+        const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER
+        const redirectUri = `${window.location.origin}/callback`
 
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => {
-          console.error("[v0] Callback API request timed out after 30 seconds")
-          controller.abort()
-        }, 30000) // 30 second timeout
+        console.log("[v0] Exchanging authorization code for tokens...")
 
-        try {
-          const response = await fetch("/api/auth/callback", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ code, state }),
-            signal: controller.signal,
-          })
+        const tokenResponse = await fetch(`${authServer}/oauth2/v1/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "authorization_code",
+            client_id: clientId!,
+            client_secret: clientSecret!,
+            code: code,
+            redirect_uri: redirectUri,
+          }),
+        })
 
-          clearTimeout(timeoutId)
-          console.log("[v0] Callback API response:", response.status, response.statusText)
-
-          if (!response.ok) {
-            const errorText = await response.text()
-            console.error("[v0] Callback API failed:", {
-              status: response.status,
-              statusText: response.statusText,
-              error: errorText,
-              headers: Object.fromEntries(response.headers.entries()),
-            })
-            throw new Error(`Authentication failed: ${response.status} - ${errorText}`)
-          }
-
-          const responseData = await response.json()
-          console.log("[v0] Callback API success:", {
-            hasUser: !!responseData.user,
-            userEmail: responseData.user?.email,
-            hasTokens: !!responseData.tokens,
-            tokenKeys: responseData.tokens ? Object.keys(responseData.tokens) : [],
-          })
-
-          const { user, tokens } = responseData
-
-          if (!user || !tokens) {
-            console.error("[v0] Invalid response from callback API:", { user: !!user, tokens: !!tokens })
-            throw new Error("Invalid authentication response - missing user or tokens")
-          }
-
-          // Set user in auth context
-          console.log("[v0] Setting user in auth context:", user?.email)
-          setUser(user)
-
-          console.log("[v0] Storing tokens in localStorage...")
-          localStorage.setItem("okta_tokens", JSON.stringify(tokens))
-          localStorage.setItem("okta_access_token", tokens.access_token)
-
-          // Verify storage immediately
-          const storedTokens = localStorage.getItem("okta_tokens")
-          const storedAccessToken = localStorage.getItem("okta_access_token")
-          console.log("[v0] Token storage verification:", {
-            storedTokens: !!storedTokens,
-            storedAccessToken: !!storedAccessToken,
-            tokensLength: storedTokens?.length,
-            accessTokenLength: storedAccessToken?.length,
-          })
-
-          // Parse and verify token content
-          try {
-            const parsedTokens = JSON.parse(storedTokens || "{}")
-            console.log("[v0] Parsed stored tokens:", {
-              hasIdToken: !!parsedTokens.id_token,
-              hasAccessToken: !!parsedTokens.access_token,
-              idTokenLength: parsedTokens.id_token?.length,
-              accessTokenLength: parsedTokens.access_token?.length,
-            })
-          } catch (e) {
-            console.error("[v0] Failed to parse stored tokens:", e)
-          }
-
-          let redirectPath = "/"
-          if (state === "jarvis") {
-            redirectPath = "/jarvis"
-          } else if (state === "agent0" || state === "admin") {
-            redirectPath = "/agent0"
-          } else if (state === "inventory") {
-            redirectPath = "/inventory"
-          } else if (state === "todo0" || state === "todo") {
-            redirectPath = "/todo0"
-          }
-
-          console.log("[v0] === CALLBACK PROCESSING END ===")
-          console.log("[v0] Redirecting to:", redirectPath)
-          router.push(redirectPath)
-        } catch (fetchError) {
-          clearTimeout(timeoutId)
-          if (fetchError.name === "AbortError") {
-            console.error("[v0] Callback API request was aborted due to timeout")
-            throw new Error("Authentication request timed out. Please try again.")
-          }
-          throw fetchError
+        if (!tokenResponse.ok) {
+          const errorText = await tokenResponse.text()
+          console.error("[v0] Token exchange failed:", errorText)
+          throw new Error(`Token exchange failed: ${errorText}`)
         }
+
+        const tokens = await tokenResponse.json()
+        console.log("[v0] Token exchange successful")
+
+        localStorage.setItem("okta_tokens", JSON.stringify(tokens))
+        console.log("[v0] Tokens stored in localStorage")
+
+        const redirectPath = state === "jarvis" ? "/jarvis" : "/"
+        console.log("[v0] Redirecting to:", redirectPath)
+        router.push(redirectPath)
       } catch (err) {
         console.error("[v0] Callback processing error:", err)
-        setError(err instanceof Error ? err.message : "Failed to complete authentication")
+        setError(err instanceof Error ? err.message : "Authentication failed")
       }
     }
 
     processCallback()
-  }, [searchParams, router, setUser])
+  }, [searchParams, router])
 
   if (error) {
     return (
