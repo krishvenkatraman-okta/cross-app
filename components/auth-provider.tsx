@@ -36,41 +36,46 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null)
 
 let oktaAuth: OktaAuth | null = null
+let initPromise: Promise<OktaAuth | null> | null = null
 
-const initializeOktaAuth = (appType = "jarvis") => {
+const initializeOktaAuth = async (appType = "jarvis"): Promise<OktaAuth | null> => {
   if (typeof window === "undefined") return null
 
-  const clientId =
-    appType === "jarvis"
-      ? process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
-      : process.env.NEXT_PUBLIC_OKTA_INVENTORY_CLIENT_ID || process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
+  if (initPromise) return initPromise
 
-  const issuer = process.env.NEXT_PUBLIC_OKTA_ISSUER || "https://fcxdemo.okta.com"
+  if (oktaAuth) return oktaAuth
 
-  if (!clientId || !issuer) {
-    console.error("[v0] Missing Okta configuration for", appType)
-    return null
-  }
+  initPromise = (async () => {
+    try {
+      const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
+      const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER || "https://fcxdemo.okta.com/oauth2/v1"
 
-  import("@okta/okta-auth-js")
-    .then(({ OktaAuth }) => {
+      if (!clientId || !authServer) {
+        console.error("[v0] Missing Okta configuration for", appType)
+        return null
+      }
+
+      const { OktaAuth } = await import("@okta/okta-auth-js")
+
       oktaAuth = new OktaAuth({
-        issuer,
+        issuer: authServer,
         clientId,
         redirectUri: `${window.location.origin}/callback`,
         scopes: ["openid", "profile", "email"],
-        pkce: true, // Enable PKCE
+        pkce: true,
         responseType: "code",
         state: appType,
       })
 
       console.log("[v0] Okta Auth initialized for", appType, "with PKCE enabled")
-    })
-    .catch((error) => {
+      return oktaAuth
+    } catch (error) {
       console.error("[v0] Failed to initialize Okta Auth:", error)
-    })
+      return null
+    }
+  })()
 
-  return oktaAuth
+  return initPromise
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -122,22 +127,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const handleCallback = async () => {
     try {
-      if (!oktaAuth) {
-        // Initialize with default app type for callback
-        initializeOktaAuth("jarvis")
-        // Wait a bit for initialization
-        await new Promise((resolve) => setTimeout(resolve, 100))
-      }
+      const auth = await initializeOktaAuth("jarvis")
 
-      if (oktaAuth) {
+      if (auth) {
         console.log("[v0] Handling login redirect with okta-auth-js")
-        await oktaAuth.handleLoginRedirect()
+        await auth.handleLoginRedirect()
 
-        const isAuthenticated = await oktaAuth.isAuthenticated()
+        const isAuthenticated = await auth.isAuthenticated()
         if (isAuthenticated) {
-          const userInfo = await oktaAuth.getUser()
-          const idToken = oktaAuth.getIdToken()
-          const accessToken = oktaAuth.getAccessToken()
+          const userInfo = await auth.getUser()
+          const idToken = auth.getIdToken()
+          const accessToken = auth.getAccessToken()
 
           const tokens = {
             id_token: idToken,
@@ -157,7 +157,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(userData)
           console.log("[v0] Authentication successful, user set:", userData.email)
 
-          // Redirect to appropriate page
           const state = new URLSearchParams(window.location.search).get("state")
           const redirectPath = state === "jarvis" ? "/jarvis" : state === "inventory" ? "/inventory" : "/"
           window.location.href = redirectPath
@@ -185,7 +184,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log("[v0] Starting sign in for app type:", detectedAppType)
 
-      const auth = initializeOktaAuth(detectedAppType)
+      const auth = await initializeOktaAuth(detectedAppType)
       if (!auth) {
         console.error("[v0] Failed to initialize Okta Auth")
         return
@@ -214,9 +213,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (oktaAuth) {
         await oktaAuth.signOut()
       } else {
-        // Fallback to manual logout
-        const issuer = process.env.NEXT_PUBLIC_OKTA_ISSUER || "https://fcxdemo.okta.com"
-        const logoutUrl = `${issuer}/oauth2/v1/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`
+        const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER || "https://fcxdemo.okta.com/oauth2/v1"
+        const logoutUrl = `${authServer}/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`
         window.location.href = logoutUrl
       }
     } catch (error) {
