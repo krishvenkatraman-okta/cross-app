@@ -93,50 +93,29 @@ export default function JarvisPage() {
     try {
       console.log("[v0] Client-side token exchange starting...")
 
-      const tokenParts = idToken.split(".")
-      if (tokenParts.length !== 3) {
-        console.log("[v0] Invalid JWT format")
-        return null
-      }
-
-      const payload = JSON.parse(Buffer.from(tokenParts[1], "base64url").toString())
-      const oktaDomain = payload.iss
-      const clientId = payload.aud
-      const clientSecret = process.env.OKTA_JARVIS_CLIENT_SECRET
-      const audience = process.env.NEXT_PUBLIC_OKTA_AUDIENCE || "http://localhost:5001"
-
-      const tokenEndpoint = `${oktaDomain}/oauth2/v1/token`
-
-      console.log("[v0] Making client-side token exchange to:", tokenEndpoint)
-
-      const tokenExchangeResponse = await fetch(tokenEndpoint, {
+      const response = await fetch("/api/jarvis/cross-app-access", {
         method: "POST",
-        credentials: "include", // Include session cookies
+        credentials: "include",
         headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
         },
-        body: new URLSearchParams({
-          grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
-          requested_token_type: "urn:ietf:params:oauth:token-type:id-jag",
-          subject_token: idToken,
-          subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
-          audience: audience,
-          client_id: clientId,
-          client_secret: clientSecret || "",
+        body: JSON.stringify({
+          action: "token-exchange",
         }),
       })
 
-      if (tokenExchangeResponse.ok) {
-        const jagTokenData = await tokenExchangeResponse.json()
+      if (response.ok) {
+        const data = await response.json()
         console.log("[v0] Client-side token exchange successful")
 
         return {
-          id_jag_token: jagTokenData.access_token,
-          inventory_access_token: jagTokenData.access_token,
+          id_jag_token: data.id_jag_token,
+          inventory_access_token: data.inventory_access_token,
         }
       } else {
-        const errorText = await tokenExchangeResponse.text()
-        console.error("[v0] Client-side token exchange failed:", tokenExchangeResponse.status, errorText)
+        const errorText = await response.text()
+        console.error("[v0] Client-side token exchange failed:", response.status, errorText)
         return null
       }
     } catch (error) {
