@@ -81,16 +81,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const validateToken = async (token: string) => {
     try {
-      // The validation endpoint is failing and clearing tokens, preventing client-side token exchange
-      console.log("[v0] Skipping token validation to preserve tokens for client-side exchange")
+      console.log("[v0] Token found but validation disabled to preserve tokens for client-side exchange")
 
-      // Create a basic user object from the token if it exists
-      setUser({
-        id: "temp-user",
-        email: "user@example.com",
-        name: "Authenticated User",
-        groups: ["user"],
-      })
+      // Don't create a fake user - let the user remain null so JARVIS page can redirect to login
+      // The user will only be set when we have valid tokens and successful authentication
 
       /* Commented out failing validation that clears tokens
       const response = await fetch("/api/auth/validate", {

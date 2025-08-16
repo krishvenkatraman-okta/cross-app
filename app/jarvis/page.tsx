@@ -80,6 +80,13 @@ export default function JarvisPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  useEffect(() => {
+    if (!isLoading && !user) {
+      console.log("[v0] No authenticated user found, redirecting to login")
+      signIn("jarvis")
+    }
+  }, [user, isLoading, signIn])
+
   const performTokenExchange = async (
     idToken: string,
   ): Promise<{ id_jag_token: string; inventory_access_token: string } | null> => {
@@ -330,81 +337,22 @@ export default function JarvisPage() {
     }
   }
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 flex items-center justify-center p-4 relative overflow-hidden">
+        <div className="bg-slate-800/80 backdrop-blur-sm border border-blue-500/30 rounded-2xl shadow-2xl p-8 max-w-md w-full text-center relative z-10">
+          <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-blue-200">Checking authentication...</p>
+        </div>
+      </div>
+    )
+  }
+
   if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 flex items-center justify-center p-4 relative overflow-hidden">
-        {/* Outer rotating ring */}
-        <div
-          className="absolute w-96 h-96 border-2 border-cyan-400/30 rounded-full animate-spin"
-          style={{ animationDuration: "20s" }}
-        >
-          <div className="absolute top-0 left-1/2 w-1 h-8 bg-cyan-400 transform -translate-x-1/2 -translate-y-2"></div>
-          <div className="absolute top-8 right-8 w-1 h-4 bg-cyan-400/60 transform rotate-45"></div>
-          <div className="absolute right-0 top-1/2 w-8 h-1 bg-cyan-400 transform -translate-y-1/2 translate-x-2"></div>
-          <div className="absolute bottom-8 right-8 w-1 h-4 bg-cyan-400/60 transform -rotate-45"></div>
-          <div className="absolute bottom-0 left-1/2 w-1 h-8 bg-cyan-400 transform -translate-x-1/2 translate-y-2"></div>
-          <div className="absolute bottom-8 left-8 w-1 h-4 bg-cyan-400/60 transform rotate-45"></div>
-          <div className="absolute left-0 top-1/2 w-8 h-1 bg-cyan-400 transform -translate-y-1/2 -translate-x-2"></div>
-          <div className="absolute top-8 left-8 w-1 h-4 bg-cyan-400/60 transform -rotate-45"></div>
-        </div>
-
-        {/* Middle rotating ring */}
-        <div
-          className="absolute w-72 h-72 border border-blue-400/40 rounded-full animate-spin"
-          style={{ animationDuration: "15s", animationDirection: "reverse" }}
-        >
-          {Array.from({ length: 24 }).map((_, i) => (
-            <div
-              key={i}
-              className="absolute w-0.5 h-6 bg-blue-400/50"
-              style={{
-                top: "10px",
-                left: "50%",
-                transformOrigin: "50% 134px",
-                transform: `translateX(-50%) rotate(${i * 15}deg)`,
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Inner rotating ring with segments */}
-        <div
-          className="absolute w-48 h-48 border border-yellow-400/30 rounded-full animate-spin"
-          style={{ animationDuration: "10s" }}
-        >
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div
-              key={i}
-              className={`absolute w-1 h-8 ${i % 3 === 0 ? "bg-yellow-400" : "bg-yellow-400/40"}`}
-              style={{
-                top: "8px",
-                left: "50%",
-                transformOrigin: "50% 88px",
-                transform: `translateX(-50%) rotate(${i * 45}deg)`,
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Central core */}
-        <div className="absolute w-24 h-24 border-2 border-cyan-300/50 rounded-full bg-slate-900/80 backdrop-blur-sm flex items-center justify-center">
-          <div className="w-16 h-16 border border-cyan-400/30 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center">
-            <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></div>
-          </div>
-        </div>
-
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.1),transparent_50%)]"></div>
-        <div
-          className="absolute inset-0 bg-[conic-gradient(from_0deg_at_50%_50%,transparent_0deg,rgba(59,130,246,0.05)_60deg,transparent_120deg)] animate-spin"
-          style={{ animationDuration: "20s" }}
-        ></div>
-
         <div className="bg-slate-800/80 backdrop-blur-sm border border-blue-500/30 rounded-2xl shadow-2xl p-8 max-w-md w-full text-center relative z-10">
-          <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-500/50">
-            <span className="text-2xl">🤖</span>
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-2">JARVIS AI Assistant</h1>
-          <p className="text-blue-200 mb-8">Please sign in with Okta to access your AI assistant</p>
+          <p className="text-blue-200 mb-4">Redirecting to login...</p>
           <Button
             onClick={() => signIn("jarvis")}
             className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white py-3 shadow-lg shadow-blue-500/25 border-0"
