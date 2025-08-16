@@ -49,8 +49,9 @@ const initializeOktaAuth = async (appType = "jarvis"): Promise<OktaAuth | null> 
     try {
       const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
       const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER || "https://fcxdemo.okta.com/oauth2/v1"
+      const issuer = authServer.replace("/oauth2/v1", "")
 
-      if (!clientId || !authServer) {
+      if (!clientId || !issuer) {
         console.error("[v0] Missing Okta configuration for", appType)
         return null
       }
@@ -58,7 +59,7 @@ const initializeOktaAuth = async (appType = "jarvis"): Promise<OktaAuth | null> 
       const { OktaAuth } = await import("@okta/okta-auth-js")
 
       oktaAuth = new OktaAuth({
-        issuer: authServer,
+        issuer,
         clientId,
         redirectUri: `${window.location.origin}/callback`,
         scopes: ["openid", "profile", "email"],
@@ -214,7 +215,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await oktaAuth.signOut()
       } else {
         const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER || "https://fcxdemo.okta.com/oauth2/v1"
-        const logoutUrl = `${authServer}/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`
+        const baseDomain = authServer.replace("/oauth2/v1", "")
+        const logoutUrl = `${baseDomain}/login/signout?fromURI=${encodeURIComponent(window.location.origin)}`
         window.location.href = logoutUrl
       }
     } catch (error) {
