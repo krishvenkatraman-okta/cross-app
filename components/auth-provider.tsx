@@ -3,6 +3,7 @@
 import type React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
 import { getAuthServerUrls } from "@/lib/okta-config"
+import { generateCodeVerifier, generateCodeChallenge } from "@/utils/pkce"
 
 interface User {
   id: string
@@ -181,8 +182,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const nonce = Math.random().toString(36).substring(2, 15)
 
+    const codeVerifier = generateCodeVerifier()
+    const codeChallenge = await generateCodeChallenge(codeVerifier)
+
     localStorage.setItem("okta_state", state)
     localStorage.setItem("okta_nonce", nonce)
+    localStorage.setItem("pkce_code_verifier", codeVerifier)
 
     const authServerUrls = getAuthServerUrls(issuer)
     const authUrl = new URL(authServerUrls.authorize)
@@ -192,8 +197,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     authUrl.searchParams.set("redirect_uri", redirectUri)
     authUrl.searchParams.set("state", state)
     authUrl.searchParams.set("nonce", nonce)
+    authUrl.searchParams.set("code_challenge", codeChallenge)
+    authUrl.searchParams.set("code_challenge_method", "S256")
 
-    console.log("[v0] Starting OAuth with:", { clientId, state, redirectUri })
+    console.log("[v0] Starting OAuth with PKCE:", { clientId, state, redirectUri, hasPKCE: true })
     window.location.href = authUrl.toString()
   }
 
@@ -203,6 +210,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("okta_state")
     localStorage.removeItem("okta_nonce")
     localStorage.removeItem("jarvis-tokens")
+    localStorage.removeItem("pkce_code_verifier")
     setUser(null)
 
     console.log("[v0] Logout: Cleared all tokens and user state")
