@@ -61,7 +61,10 @@ export async function POST(request: NextRequest) {
     console.log("[v0] Extracted Okta domain from ID token:", oktaDomain)
     console.log("[v0] Using dynamic token endpoint:", dynamicTokenEndpoint)
 
-    const audienceUrl = target_app === "inventory" ? "https://auth.inventory.com/" : `https://auth.${target_app}.com/`
+    const audienceUrl =
+      target_app === "inventory"
+        ? process.env.NEXT_PUBLIC_OKTA_INVENTORY_CLIENT_ID || process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
+        : `https://auth.${target_app}.com/`
 
     const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
     if (!clientId) {
