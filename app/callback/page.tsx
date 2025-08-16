@@ -17,14 +17,21 @@ export default function CallbackPage() {
         const state = searchParams.get("state")
         const error = searchParams.get("error")
 
-        console.log("[v0] Callback processing started", { code: code?.substring(0, 10) + "...", state, error })
+        console.log("[v0] === CALLBACK PROCESSING START ===")
+        console.log("[v0] URL search params:", { code: code?.substring(0, 10) + "...", state, error })
+        console.log("[v0] Current localStorage before callback:", {
+          okta_tokens: localStorage.getItem("okta_tokens"),
+          okta_access_token: localStorage.getItem("okta_access_token"),
+        })
 
         if (error) {
+          console.error("[v0] OAuth error received:", error)
           setError(`Authentication failed: ${error}`)
           return
         }
 
         if (!code) {
+          console.error("[v0] No authorization code received from Okta")
           setError("No authorization code received")
           return
         }
@@ -38,16 +45,16 @@ export default function CallbackPage() {
           body: JSON.stringify({ code, state }),
         })
 
-        console.log("[v0] Callback API response status:", response.status, response.statusText)
+        console.log("[v0] Callback API response:", response.status, response.statusText)
 
         if (!response.ok) {
           const errorText = await response.text()
-          console.error("[v0] Callback API error:", errorText)
+          console.error("[v0] Callback API failed:", errorText)
           throw new Error("Failed to process authentication")
         }
 
         const responseData = await response.json()
-        console.log("[v0] Callback API response data:", {
+        console.log("[v0] Callback API success:", {
           hasUser: !!responseData.user,
           userEmail: responseData.user?.email,
           hasTokens: !!responseData.tokens,
@@ -65,7 +72,7 @@ export default function CallbackPage() {
           localStorage.setItem("okta_tokens", JSON.stringify(tokens))
           localStorage.setItem("okta_access_token", tokens.access_token)
 
-          // Verify storage
+          // Verify storage immediately
           const storedTokens = localStorage.getItem("okta_tokens")
           const storedAccessToken = localStorage.getItem("okta_access_token")
           console.log("[v0] Token storage verification:", {
@@ -74,6 +81,19 @@ export default function CallbackPage() {
             tokensLength: storedTokens?.length,
             accessTokenLength: storedAccessToken?.length,
           })
+
+          // Parse and verify token content
+          try {
+            const parsedTokens = JSON.parse(storedTokens || "{}")
+            console.log("[v0] Parsed stored tokens:", {
+              hasIdToken: !!parsedTokens.id_token,
+              hasAccessToken: !!parsedTokens.access_token,
+              idTokenLength: parsedTokens.id_token?.length,
+              accessTokenLength: parsedTokens.access_token?.length,
+            })
+          } catch (e) {
+            console.error("[v0] Failed to parse stored tokens:", e)
+          }
         } else {
           console.error("[v0] No tokens received from callback API!")
         }
@@ -89,9 +109,10 @@ export default function CallbackPage() {
           redirectPath = "/todo0"
         }
 
+        console.log("[v0] === CALLBACK PROCESSING END ===")
         router.push(redirectPath)
       } catch (err) {
-        console.error("Callback processing error:", err)
+        console.error("[v0] Callback processing error:", err)
         setError("Failed to complete authentication")
       }
     }

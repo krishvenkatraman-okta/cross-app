@@ -9,6 +9,14 @@ function buildAuthServerUrl(baseUrl: string, endpoint: string): string {
   return `${baseUrl}${authServerPath}${endpoint}`
 }
 
+function getRedirectUri(): string {
+  if (typeof window !== "undefined") {
+    return `${window.location.origin}/callback`
+  }
+  // Server-side fallback - use the deployed URL or localhost
+  return "https://cross-app-indol.vercel.app/callback"
+}
+
 export const oktaApps = {
   todo: {
     name: "Todo App",
@@ -19,7 +27,7 @@ export const oktaApps = {
     tokenEndpoint: buildAuthServerUrl("https://fcxdemo.okta.com", "/token"),
     emailDomain: process.env.OKTA_EMAIL_DOMAIN || "tables.fake",
     scopes: ["openid", "profile", "email", "groups"],
-    redirectUri: typeof window !== "undefined" ? `${window.location.origin}/callback` : "",
+    redirectUri: getRedirectUri(),
   },
   agent0: {
     name: "Agent0 App",
@@ -30,7 +38,7 @@ export const oktaApps = {
     tokenEndpoint: buildAuthServerUrl("https://fcxdemo.okta.com", "/token"),
     emailDomain: process.env.OKTA_EMAIL_DOMAIN || "tables.fake",
     scopes: ["openid", "profile", "email", "groups"],
-    redirectUri: typeof window !== "undefined" ? `${window.location.origin}/callback` : "",
+    redirectUri: getRedirectUri(),
   },
   jarvis: {
     name: "JARVIS App",
@@ -41,7 +49,7 @@ export const oktaApps = {
     tokenEndpoint: buildAuthServerUrl("https://fcxdemo.okta.com", "/token"),
     emailDomain: process.env.OKTA_EMAIL_DOMAIN || "tables.fake",
     scopes: ["openid", "profile", "email", "groups"],
-    redirectUri: typeof window !== "undefined" ? `${window.location.origin}/callback` : "",
+    redirectUri: getRedirectUri(),
   },
   inventory: {
     name: "Inventory App",
@@ -57,7 +65,7 @@ export const oktaApps = {
     tokenEndpoint: buildAuthServerUrl("https://fcxdemo.okta.com", "/token"),
     emailDomain: process.env.OKTA_EMAIL_DOMAIN || "tables.fake",
     scopes: ["openid", "profile", "email", "groups"],
-    redirectUri: typeof window !== "undefined" ? `${window.location.origin}/callback` : "",
+    redirectUri: getRedirectUri(),
   },
 }
 
