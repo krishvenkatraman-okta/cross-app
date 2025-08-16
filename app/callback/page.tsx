@@ -29,8 +29,14 @@ export default function CallbackPage() {
           return
         }
 
+        const codeVerifier = localStorage.getItem("pkce_code_verifier")
+        if (!codeVerifier) {
+          console.error("[v0] No PKCE code verifier found")
+          setError("PKCE code verifier missing")
+          return
+        }
+
         const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
-        const clientSecret = process.env.OKTA_JARVIS_CLIENT_SECRET
         const issuer = process.env.NEXT_PUBLIC_OKTA_ISSUER || "https://fcxdemo.okta.com"
         const redirectUri = `${window.location.origin}/callback`
 
@@ -42,9 +48,9 @@ export default function CallbackPage() {
           body: new URLSearchParams({
             grant_type: "authorization_code",
             client_id: clientId!,
-            client_secret: clientSecret!,
             code: code,
             redirect_uri: redirectUri,
+            code_verifier: codeVerifier, // Include PKCE code verifier
           }),
         })
 
@@ -58,6 +64,7 @@ export default function CallbackPage() {
         console.log("[v0] Token exchange successful")
 
         localStorage.setItem("okta_tokens", JSON.stringify(tokens))
+        localStorage.removeItem("pkce_code_verifier")
         console.log("[v0] Tokens stored in localStorage")
 
         const redirectPath = state === "jarvis" ? "/jarvis" : "/"

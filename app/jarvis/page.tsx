@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
+import { generateCodeVerifier, generateCodeChallengeSync } from "@/utils/pkce"
 
 interface Message {
   id: string
@@ -78,6 +79,12 @@ export default function JarvisPage() {
     const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER || "https://fcxdemo.okta.com/oauth2/v1"
     const redirectUri = `${window.location.origin}/callback`
 
+    const codeVerifier = generateCodeVerifier()
+    const codeChallenge = generateCodeChallengeSync(codeVerifier)
+
+    // Store code verifier for token exchange
+    localStorage.setItem("pkce_code_verifier", codeVerifier)
+
     const authUrl =
       `${authServer}/authorize?` +
       new URLSearchParams({
@@ -86,6 +93,8 @@ export default function JarvisPage() {
         scope: "openid profile email",
         redirect_uri: redirectUri,
         state: "jarvis",
+        code_challenge: codeChallenge,
+        code_challenge_method: "S256",
       })
 
     console.log("[v0] Redirecting to Okta:", authUrl)
