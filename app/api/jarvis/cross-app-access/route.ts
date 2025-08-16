@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
 
     const audienceUrl =
       target_app === "inventory"
-        ? process.env.NEXT_PUBLIC_OKTA_INVENTORY_CLIENT_ID || process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
+        ? `${request.nextUrl.origin}/api/inventory/oauth2` // Inventory app's authorization server URL
         : `https://auth.${target_app}.com/`
 
     const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
@@ -100,11 +100,19 @@ export async function POST(request: NextRequest) {
     console.log("[v0] Request body parameters:", Array.from(requestBody.keys()))
     console.log("[v0] Subject token is present in request:", requestBody.has("subject_token"))
 
+    const cookieHeader = request.headers.get("cookie")
+    const headers: Record<string, string> = {
+      "Content-Type": "application/x-www-form-urlencoded",
+    }
+
+    if (cookieHeader) {
+      headers["Cookie"] = cookieHeader
+      console.log("[v0] Forwarding session cookies to Okta")
+    }
+
     const idJagResponse = await fetch(dynamicTokenEndpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
+      headers,
       body: requestBody,
     })
 
