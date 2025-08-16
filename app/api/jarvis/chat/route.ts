@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { generateText } from "ai"
-import { createDemoIdToken, formatInventoryResponse } from "./utils"
+import { formatInventoryResponse } from "./utils"
 
 interface Message {
   role: "user" | "assistant"
@@ -307,96 +307,75 @@ async function getCrossAppToken(
   targetApp: string,
 ): Promise<{ id_jag_token: string; inventory_access_token: string } | null> {
   try {
-    const cookies = request.headers.get("cookie")
-    let userIdToken = null
-
-    console.log("[v0] Checking for user token in cookies and localStorage...")
-
-    // First check cookies (for server-side requests)
-    if (cookies) {
-      const oktaTokenMatch = cookies.match(/okta-token=([^;]+)/)
-      const oktaTokensMatch = cookies.match(/okta_tokens=([^;]+)/)
-      const accessTokenMatch = cookies.match(/okta_access_token=([^;]+)/)
-
-      if (oktaTokenMatch) {
-        userIdToken = decodeURIComponent(oktaTokenMatch[1])
-        console.log("[v0] Found okta-token in cookies:", userIdToken?.substring(0, 20) + "...")
-      } else if (oktaTokensMatch) {
-        const tokensData = JSON.parse(decodeURIComponent(oktaTokensMatch[1]))
-        userIdToken = tokensData.id_token || tokensData.access_token
-        console.log("[v0] Found okta_tokens in cookies, using id_token:", userIdToken?.substring(0, 20) + "...")
-      } else if (accessTokenMatch) {
-        userIdToken = decodeURIComponent(accessTokenMatch[1])
-        console.log("[v0] Found okta_access_token in cookies:", userIdToken?.substring(0, 20) + "...")
-      }
+    const authHeader = request.headers.get("authorization")
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      console.log("[v0] No Authorization header found")
+      return null
     }
 
-    // If not found in cookies, check if we can get it from the request body or headers
-    // (since localStorage is client-side only, we need the client to send it)
-    if (!userIdToken) {
-      // Try to get from Authorization header (if client sends it)
-      const authHeader = request.headers.get("authorization")
-      if (authHeader && authHeader.startsWith("Bearer ")) {
-        userIdToken = authHeader.substring(7)
-        console.log("[v0] Found token in Authorization header:", userIdToken?.substring(0, 20) + "...")
-      }
+    const userIdToken = authHeader.substring(7)
+    console.log("[v0] Using ID token from Authorization header:", userIdToken?.substring(0, 20) + "...")
+
+    const tokenParts = userIdToken.split(".")
+    if (tokenParts.length !== 3) {
+      console.log("[v0] Invalid JWT format")
+      return null
     }
 
-    if (userIdToken) {
-      try {
-        const tokenParts = userIdToken.split(".")
-        if (tokenParts.length === 3) {
-          const payload = JSON.parse(Buffer.from(tokenParts[1], "base64url").toString())
-          console.log("[v0] Backend ID token details:", {
-            issuer: payload.iss,
-            audience: payload.aud,
-            subject: payload.sub,
-            expires: payload.exp,
-            issuedAt: payload.iat,
-            expired: payload.exp < Math.floor(Date.now() / 1000),
-            tokenLength: userIdToken.length,
-            tokenStart: userIdToken.substring(0, 50),
-            tokenEnd: userIdToken.substring(userIdToken.length - 50),
-          })
-        }
-      } catch (error) {
-        console.log("[v0] Could not decode backend ID token for debugging:", error)
-      }
-    }
-
-    if (!userIdToken) {
-      console.log("[v0] No real user token found, using demo token")
-      userIdToken = createDemoIdToken()
-    }
-
-    console.log("[v0] Making cross-app access request...")
-
-    const response = await fetch(`${request.nextUrl.origin}/api/jarvis/cross-app-access`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${userIdToken}`,
-      },
-      body: JSON.stringify({ target_app: targetApp }),
+    const payload = JSON.parse(Buffer.from(tokenParts[1], "base64url").toString())
+    console.log("[v0] ID token payload:", {
+      issuer: payload.iss,
+      audience: payload.aud,
+      subject: payload.sub,
+      expires: payload.exp,
+      expired: payload.exp < Math.floor(Date.now() / 1000),
     })
 
-    console.log("[v0] Cross-app access response status:", response.status)
+    if (payload.exp < Math.floor(Date.now() / 1000)) {
+      console.log("[v0] ID token is expired")
+      return null
+    }
 
-    if (response.ok) {
-      const data = await response.json()
-      console.log("[v0] Cross-app access response data keys:", Object.keys(data))
-      console.log("[v0] Obtained cross-app access tokens for", targetApp)
+    const oktaDomain = payload.iss
+    const clientId = payload.aud
+    const clientSecret = process.env.OKTA_JARVIS_CLIENT_SECRET
+    const audience = process.env.NEXT_PUBLIC_OKTA_AUDIENCE || "http://localhost:5001"
+
+    const tokenEndpoint = `${oktaDomain}/oauth2/v1/token`
+
+    console.log("[v0] Making direct token exchange to:", tokenEndpoint)
+
+    const tokenExchangeResponse = await fetch(tokenEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+        requested_token_type: "urn:ietf:params:oauth:token-type:id-jag",
+        subject_token: userIdToken,
+        subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
+        audience: audience,
+        client_id: clientId,
+        client_secret: clientSecret || "",
+      }),
+    })
+
+    if (tokenExchangeResponse.ok) {
+      const jagTokenData = await tokenExchangeResponse.json()
+      console.log("[v0] Successfully obtained JAG token")
+
       return {
-        id_jag_token: data.id_jag_token || data.access_token,
-        inventory_access_token: data.access_token,
+        id_jag_token: jagTokenData.access_token,
+        inventory_access_token: jagTokenData.access_token,
       }
     } else {
-      const errorText = await response.text()
-      console.error("[v0] Failed to get cross-app token:", response.status, errorText)
+      const errorText = await tokenExchangeResponse.text()
+      console.error("[v0] Token exchange failed:", tokenExchangeResponse.status, errorText)
       return null
     }
   } catch (error) {
-    console.error("[v0] Cross-app token request failed:", error)
+    console.error("[v0] Direct token exchange failed:", error)
     return null
   }
 }

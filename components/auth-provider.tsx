@@ -33,24 +33,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const checkAuthStatus = async () => {
     try {
       const tokensJson = localStorage.getItem("okta_tokens")
-      const accessToken = localStorage.getItem("okta_access_token")
+      let token = null
 
-      let token = accessToken
-      if (!token && tokensJson) {
+      if (tokensJson) {
         try {
           const tokens = JSON.parse(tokensJson)
-          token = tokens.access_token
-          // Update the individual access token storage for consistency
-          if (token) {
-            localStorage.setItem("okta_access_token", token)
-          }
+          token = tokens.access_token || tokens.id_token
+          console.log("[v0] Found tokens in okta_tokens:", token ? "present" : "missing")
         } catch (e) {
           console.error("Failed to parse stored tokens:", e)
         }
       }
 
+      if (!token) {
+        token = localStorage.getItem("okta_access_token")
+        console.log("[v0] Fallback to okta_access_token:", token ? "present" : "missing")
+      }
+
       if (token) {
         await validateToken(token)
+      } else {
+        console.log("[v0] No valid tokens found, user needs to login")
       }
     } catch (error) {
       console.error("Auth check failed:", error)
@@ -68,12 +71,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (response.ok) {
         const userData = await response.json()
         setUser(userData)
+        console.log("[v0] Token validation successful, user authenticated")
       } else {
+        console.log("[v0] Token validation failed, clearing stored tokens")
         localStorage.removeItem("okta_access_token")
+        localStorage.removeItem("okta_tokens")
       }
     } catch (error) {
       console.error("Token validation failed:", error)
       localStorage.removeItem("okta_access_token")
+      localStorage.removeItem("okta_tokens")
     }
   }
 
