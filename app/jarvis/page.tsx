@@ -184,6 +184,26 @@ export default function JarvisPage() {
             "[v0] JARVIS sending ID token in Authorization header:",
             oktaTokens.id_token.substring(0, 20) + "...",
           )
+
+          try {
+            const tokenParts = oktaTokens.id_token.split(".")
+            if (tokenParts.length === 3) {
+              const payload = JSON.parse(atob(tokenParts[1]))
+              console.log("[v0] Frontend ID token details:", {
+                issuer: payload.iss,
+                audience: payload.aud,
+                subject: payload.sub,
+                expires: payload.exp,
+                issuedAt: payload.iat,
+                expired: payload.exp < Math.floor(Date.now() / 1000),
+                tokenLength: oktaTokens.id_token.length,
+                tokenStart: oktaTokens.id_token.substring(0, 50),
+                tokenEnd: oktaTokens.id_token.substring(oktaTokens.id_token.length - 50),
+              })
+            }
+          } catch (error) {
+            console.log("[v0] Could not decode frontend ID token for debugging:", error)
+          }
         }
       }
 

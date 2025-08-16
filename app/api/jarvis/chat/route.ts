@@ -342,6 +342,28 @@ async function getCrossAppToken(
       }
     }
 
+    if (userIdToken) {
+      try {
+        const tokenParts = userIdToken.split(".")
+        if (tokenParts.length === 3) {
+          const payload = JSON.parse(Buffer.from(tokenParts[1], "base64url").toString())
+          console.log("[v0] Backend ID token details:", {
+            issuer: payload.iss,
+            audience: payload.aud,
+            subject: payload.sub,
+            expires: payload.exp,
+            issuedAt: payload.iat,
+            expired: payload.exp < Math.floor(Date.now() / 1000),
+            tokenLength: userIdToken.length,
+            tokenStart: userIdToken.substring(0, 50),
+            tokenEnd: userIdToken.substring(userIdToken.length - 50),
+          })
+        }
+      } catch (error) {
+        console.log("[v0] Could not decode backend ID token for debugging:", error)
+      }
+    }
+
     if (!userIdToken) {
       console.log("[v0] No real user token found, using demo token")
       userIdToken = createDemoIdToken()
