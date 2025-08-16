@@ -31,7 +31,9 @@ export async function POST(request: NextRequest) {
 
     const host = request.headers.get("host")
     const protocol = request.headers.get("x-forwarded-proto") || "https"
-    const redirectUri = `${protocol}://${host}/callback`
+    const redirectUri = process.env.NEXT_PUBLIC_BASE_URL
+      ? `${process.env.NEXT_PUBLIC_BASE_URL}/callback`
+      : `${protocol}://${host}/callback`
 
     const authServerUrls = getAuthServerUrls()
     const tokenEndpoint = authServerUrls.token
