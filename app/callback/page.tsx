@@ -37,37 +37,56 @@ export default function CallbackPage() {
         }
 
         console.log("[v0] Making callback API request...")
-        const response = await fetch("/api/auth/callback", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ code, state }),
-        })
 
-        console.log("[v0] Callback API response:", response.status, response.statusText)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => {
+          console.error("[v0] Callback API request timed out after 30 seconds")
+          controller.abort()
+        }, 30000) // 30 second timeout
 
-        if (!response.ok) {
-          const errorText = await response.text()
-          console.error("[v0] Callback API failed:", errorText)
-          throw new Error("Failed to process authentication")
-        }
+        try {
+          const response = await fetch("/api/auth/callback", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ code, state }),
+            signal: controller.signal,
+          })
 
-        const responseData = await response.json()
-        console.log("[v0] Callback API success:", {
-          hasUser: !!responseData.user,
-          userEmail: responseData.user?.email,
-          hasTokens: !!responseData.tokens,
-          tokenKeys: responseData.tokens ? Object.keys(responseData.tokens) : [],
-        })
+          clearTimeout(timeoutId)
+          console.log("[v0] Callback API response:", response.status, response.statusText)
 
-        const { user, tokens } = responseData
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error("[v0] Callback API failed:", {
+              status: response.status,
+              statusText: response.statusText,
+              error: errorText,
+              headers: Object.fromEntries(response.headers.entries()),
+            })
+            throw new Error(`Authentication failed: ${response.status} - ${errorText}`)
+          }
 
-        // Set user in auth context
-        console.log("[v0] Setting user in auth context:", user?.email)
-        setUser(user)
+          const responseData = await response.json()
+          console.log("[v0] Callback API success:", {
+            hasUser: !!responseData.user,
+            userEmail: responseData.user?.email,
+            hasTokens: !!responseData.tokens,
+            tokenKeys: responseData.tokens ? Object.keys(responseData.tokens) : [],
+          })
 
-        if (tokens) {
+          const { user, tokens } = responseData
+
+          if (!user || !tokens) {
+            console.error("[v0] Invalid response from callback API:", { user: !!user, tokens: !!tokens })
+            throw new Error("Invalid authentication response - missing user or tokens")
+          }
+
+          // Set user in auth context
+          console.log("[v0] Setting user in auth context:", user?.email)
+          setUser(user)
+
           console.log("[v0] Storing tokens in localStorage...")
           localStorage.setItem("okta_tokens", JSON.stringify(tokens))
           localStorage.setItem("okta_access_token", tokens.access_token)
@@ -94,26 +113,32 @@ export default function CallbackPage() {
           } catch (e) {
             console.error("[v0] Failed to parse stored tokens:", e)
           }
-        } else {
-          console.error("[v0] No tokens received from callback API!")
-        }
 
-        let redirectPath = "/"
-        if (state === "jarvis") {
-          redirectPath = "/jarvis"
-        } else if (state === "agent0" || state === "admin") {
-          redirectPath = "/agent0"
-        } else if (state === "inventory") {
-          redirectPath = "/inventory"
-        } else if (state === "todo0" || state === "todo") {
-          redirectPath = "/todo0"
-        }
+          let redirectPath = "/"
+          if (state === "jarvis") {
+            redirectPath = "/jarvis"
+          } else if (state === "agent0" || state === "admin") {
+            redirectPath = "/agent0"
+          } else if (state === "inventory") {
+            redirectPath = "/inventory"
+          } else if (state === "todo0" || state === "todo") {
+            redirectPath = "/todo0"
+          }
 
-        console.log("[v0] === CALLBACK PROCESSING END ===")
-        router.push(redirectPath)
+          console.log("[v0] === CALLBACK PROCESSING END ===")
+          console.log("[v0] Redirecting to:", redirectPath)
+          router.push(redirectPath)
+        } catch (fetchError) {
+          clearTimeout(timeoutId)
+          if (fetchError.name === "AbortError") {
+            console.error("[v0] Callback API request was aborted due to timeout")
+            throw new Error("Authentication request timed out. Please try again.")
+          }
+          throw fetchError
+        }
       } catch (err) {
         console.error("[v0] Callback processing error:", err)
-        setError("Failed to complete authentication")
+        setError(err instanceof Error ? err.message : "Failed to complete authentication")
       }
     }
 
