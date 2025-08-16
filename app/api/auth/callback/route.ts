@@ -5,15 +5,15 @@ export async function POST(request: NextRequest) {
   console.log("[v0] === CALLBACK API START ===")
 
   try {
-    const { code, state } = await request.json()
+    const { code, state, codeVerifier } = await request.json()
 
-    console.log("[v0] Callback received:", { code: code?.substring(0, 10) + "...", state })
+    console.log("[v0] Callback received:", {
+      code: code?.substring(0, 10) + "...",
+      state,
+      hasCodeVerifier: !!codeVerifier,
+    })
 
-    const requiredEnvVars = [
-      "NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID",
-      "OKTA_JARVIS_CLIENT_SECRET",
-      "NEXT_PUBLIC_OKTA_AUTH_SERVER",
-    ]
+    const requiredEnvVars = ["NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID", "NEXT_PUBLIC_OKTA_AUTH_SERVER"]
 
     for (const envVar of requiredEnvVars) {
       if (!process.env[envVar]) {
@@ -34,28 +34,18 @@ export async function POST(request: NextRequest) {
         : isInventory
           ? process.env.NEXT_PUBLIC_OKTA_INVENTORY_CLIENT_ID
           : process.env.NEXT_PUBLIC_OKTA_TODO_CLIENT_ID
-    const clientSecret = isJarvis
-      ? process.env.OKTA_JARVIS_CLIENT_SECRET
-      : isAgent0
-        ? process.env.OKTA_AGENT0_CLIENT_SECRET
-        : isInventory
-          ? process.env.OKTA_INVENTORY_CLIENT_SECRET
-          : process.env.OKTA_TODO_CLIENT_SECRET
 
-    if (!clientId || !clientSecret) {
-      console.error("[v0] Missing client credentials:", {
-        clientId: !!clientId,
-        clientSecret: !!clientSecret,
-        state,
-        isJarvis,
-        isAgent0,
-        isInventory,
-        isTodo0,
-      })
-      throw new Error(`Missing client credentials for state: ${state}`)
+    if (!clientId) {
+      console.error("[v0] Missing client ID for state:", state)
+      throw new Error(`Missing client ID for state: ${state}`)
     }
 
-    console.log("[v0] Using client:", { clientId, isAgent0, isTodo0, isJarvis, isInventory, state })
+    if (!codeVerifier) {
+      console.error("[v0] Missing PKCE code verifier")
+      throw new Error("PKCE code verifier is required for authentication")
+    }
+
+    console.log("[v0] Using PKCE flow with client:", { clientId, state })
 
     const host = request.headers.get("host")
     const protocol = request.headers.get("x-forwarded-proto") || "https"
@@ -72,16 +62,13 @@ export async function POST(request: NextRequest) {
       throw new Error("Invalid authorization server configuration")
     }
 
-    const authHeader = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`
-
     console.log("[v0] Token exchange details:", {
       issuer: process.env.NEXT_PUBLIC_OKTA_ISSUER,
       tokenEndpoint,
       userinfoEndpoint,
       redirectUri,
       clientId,
-      clientSecretLength: clientSecret?.length,
-      authHeaderLength: authHeader.length,
+      codeVerifierLength: codeVerifier?.length,
       host,
       protocol,
     })
@@ -90,10 +77,12 @@ export async function POST(request: NextRequest) {
       grant_type: "authorization_code",
       code,
       redirect_uri: redirectUri,
+      client_id: clientId,
+      code_verifier: codeVerifier,
     })
 
     console.log("[v0] Token request body:", tokenBody.toString())
-    console.log("[v0] Making token exchange request to:", tokenEndpoint)
+    console.log("[v0] Making PKCE token exchange request to:", tokenEndpoint)
 
     const controller = new AbortController()
     const timeoutId = setTimeout(() => {
@@ -102,12 +91,10 @@ export async function POST(request: NextRequest) {
     }, 15000)
 
     try {
-      // Exchange authorization code for tokens
       const tokenResponse = await fetch(tokenEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          Authorization: authHeader,
         },
         body: tokenBody,
         signal: controller.signal,
@@ -118,7 +105,7 @@ export async function POST(request: NextRequest) {
 
       if (!tokenResponse.ok) {
         const errorText = await tokenResponse.text()
-        console.error("[v0] Token exchange failed:", {
+        console.error("[v0] PKCE token exchange failed:", {
           status: tokenResponse.status,
           statusText: tokenResponse.statusText,
           error: errorText,
@@ -128,13 +115,14 @@ export async function POST(request: NextRequest) {
             redirectUri,
             clientId,
             grantType: "authorization_code",
+            hasPKCE: true,
           },
         })
         throw new Error(`Token exchange failed: ${tokenResponse.status} ${errorText}`)
       }
 
       const tokens = await tokenResponse.json()
-      console.log("[v0] Token exchange successful:", {
+      console.log("[v0] PKCE token exchange successful:", {
         hasAccessToken: !!tokens.access_token,
         hasIdToken: !!tokens.id_token,
         tokenType: tokens.token_type,
@@ -149,7 +137,6 @@ export async function POST(request: NextRequest) {
       }, 10000)
 
       try {
-        // Get user info
         console.log("[v0] Making userinfo request to:", userinfoEndpoint)
         const userResponse = await fetch(userinfoEndpoint, {
           headers: {
