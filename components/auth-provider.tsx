@@ -205,11 +205,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("jarvis-tokens")
     setUser(null)
 
+    console.log("[v0] Logout: Cleared all tokens and user state")
+
     const issuer = process.env.NEXT_PUBLIC_OKTA_ISSUER
     if (issuer) {
       const authServerUrls = getAuthServerUrls(issuer)
       const logoutUrl = `${authServerUrls.logout}?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`
+      console.log("[v0] Redirecting to Okta logout:", logoutUrl)
       window.location.href = logoutUrl
+    } else {
+      console.log("[v0] No issuer configured, redirecting to home")
+      window.location.href = "/"
     }
   }
 

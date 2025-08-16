@@ -70,7 +70,7 @@ function TokenCard({ title, token, type, usage }: { title: string; token: string
 }
 
 export default function JarvisPage() {
-  const { user, signIn, isLoading } = useAuth()
+  const { user, signIn, signOut, isLoading } = useAuth()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
@@ -196,6 +196,12 @@ export default function JarvisPage() {
       console.log("[v0] okta_tokens:", storedOktaTokens)
       console.log("[v0] jarvis-tokens:", storedJarvisTokens)
 
+      if (!storedOktaTokens && !storedJarvisTokens) {
+        console.log("[v0] No tokens found in localStorage")
+        setTokens(null)
+        return
+      }
+
       let allTokens: any = {
         token_type: "Bearer",
         expires_in: 3600,
@@ -219,17 +225,6 @@ export default function JarvisPage() {
         } else {
           console.log("[v0] Skipping failed JARVIS tokens")
         }
-      }
-
-      if (!allTokens.id_jag_token || allTokens.id_jag_token.includes("demo")) {
-        delete allTokens.id_jag_token
-      }
-
-      if (!allTokens.inventory_access_token || allTokens.inventory_access_token.includes("demo")) {
-        delete allTokens.inventory_access_token
-        delete allTokens.todo_access_token
-      } else if (allTokens.inventory_access_token) {
-        allTokens.todo_access_token = allTokens.inventory_access_token
       }
 
       console.log("[v0] JARVIS final loaded tokens:", allTokens)
@@ -544,14 +539,26 @@ export default function JarvisPage() {
                   <p className="text-sm text-blue-200">AI Assistant with Inventory Access</p>
                 </div>
               </div>
-              <Button
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                variant="outline"
-                className="flex items-center gap-2 bg-slate-700/50 border-blue-500/30 text-blue-200 hover:bg-slate-600/50 hover:text-white hover:border-blue-400/50"
-              >
-                <span>{sidebarOpen ? "▶" : "◀"}</span>
-                {sidebarOpen ? "Hide" : "Show"} Tokens
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={() => {
+                    console.log("[v0] Logout button clicked")
+                    signOut()
+                  }}
+                  variant="outline"
+                  className="bg-red-600/20 border-red-500/30 text-red-200 hover:bg-red-600/30 hover:text-white hover:border-red-400/50"
+                >
+                  Logout
+                </Button>
+                <Button
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  variant="outline"
+                  className="flex items-center gap-2 bg-slate-700/50 border-blue-500/30 text-blue-200 hover:bg-slate-600/50 hover:text-white hover:border-blue-400/50"
+                >
+                  <span>{sidebarOpen ? "▶" : "◀"}</span>
+                  {sidebarOpen ? "Hide" : "Show"} Tokens
+                </Button>
+              </div>
             </div>
           </div>
 
