@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { generateText } from "ai"
 import { formatInventoryResponse } from "./utils"
+import { getAuthServerUrls } from "@/lib/okta-config"
 
 interface Message {
   role: "user" | "assistant"
@@ -26,26 +27,45 @@ export async function POST(request: NextRequest) {
     }
 
     if (aiAnalysis.isInventoryQuery) {
-      console.log("[v0] Detected inventory query, using client-provided tokens")
+      console.log("[v0] Detected inventory query, attempting server-side token exchange")
+
+      let tokenData = null
 
       if (crossAppTokens) {
         console.log("[v0] Using client-provided cross-app tokens")
-
-        const tokenData = {
+        tokenData = {
           id_jag_token: crossAppTokens.id_jag_token,
           inventory_access_token: crossAppTokens.inventory_access_token,
         }
+      } else {
+        console.log("[v0] No client tokens, attempting server-side token exchange")
 
-        console.log(
-          "[v0] Fetching inventory with token:",
-          crossAppTokens.inventory_access_token?.substring(0, 20) + "...",
-        )
+        // Get ID token from Authorization header
+        const authHeader = request.headers.get("authorization")
+        if (authHeader && authHeader.startsWith("Bearer ")) {
+          const idToken = authHeader.substring(7)
+          console.log("[v0] Found ID token in Authorization header")
+
+          try {
+            // Perform server-side token exchange
+            tokenData = await performServerSideTokenExchange(idToken)
+            console.log("[v0] Server-side token exchange successful")
+          } catch (error) {
+            console.error("[v0] Server-side token exchange failed:", error)
+          }
+        } else {
+          console.log("[v0] No Authorization header found")
+        }
+      }
+
+      if (tokenData?.inventory_access_token) {
+        console.log("[v0] Fetching inventory with token:", tokenData.inventory_access_token.substring(0, 20) + "...")
 
         const inventoryResponse = await fetch(
           `${request.nextUrl.origin}/api/inventory/items?warehouse=${aiAnalysis.warehouse}`,
           {
             headers: {
-              Authorization: `Bearer ${crossAppTokens.inventory_access_token}`,
+              Authorization: `Bearer ${tokenData.inventory_access_token}`,
             },
           },
         )
@@ -82,7 +102,7 @@ export async function POST(request: NextRequest) {
           console.error("[v0] Failed to fetch inventory:", inventoryResponse.status, errorText)
         }
       } else {
-        console.log("[v0] No cross-app tokens provided by client")
+        console.log("[v0] No valid tokens available for inventory access")
       }
     }
 
@@ -108,6 +128,87 @@ export async function POST(request: NextRequest) {
       message:
         "I'm here to help! Try asking me about your inventory or warehouse stock. The cross-app access system is working perfectly!",
     })
+  }
+}
+
+async function performServerSideTokenExchange(idToken: string) {
+  try {
+    // Decode ID token to get issuer and audience
+    const tokenPayload = JSON.parse(atob(idToken.split(".")[1]))
+    console.log("[v0] ID token payload:", {
+      iss: tokenPayload.iss,
+      aud: tokenPayload.aud,
+      exp: tokenPayload.exp,
+      expired: Date.now() / 1000 > tokenPayload.exp,
+    })
+
+    if (Date.now() / 1000 > tokenPayload.exp) {
+      throw new Error("ID token is expired")
+    }
+
+    // Extract Okta domain from issuer
+    const oktaDomain = tokenPayload.iss
+    const authServerUrls = getAuthServerUrls()
+
+    // Step 1: Exchange ID token for ID-JAG token with Okta
+    const tokenExchangeUrl = `${oktaDomain}${authServerUrls.token.replace(oktaDomain, "")}`
+    console.log("[v0] Making token exchange request to:", tokenExchangeUrl)
+
+    const tokenExchangeResponse = await fetch(tokenExchangeUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+        requested_token_type: "urn:ietf:params:oauth:token-type:id-jag",
+        audience: process.env.NEXT_PUBLIC_OKTA_AUDIENCE || "http://localhost:5001",
+        subject_token: idToken,
+        subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
+        client_id: process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID!,
+        client_secret: process.env.OKTA_JARVIS_CLIENT_SECRET!,
+      }),
+    })
+
+    console.log("[v0] Token exchange response status:", tokenExchangeResponse.status)
+
+    if (!tokenExchangeResponse.ok) {
+      const errorText = await tokenExchangeResponse.text()
+      console.error("[v0] Token exchange failed:", errorText)
+      throw new Error(`Token exchange failed: ${errorText}`)
+    }
+
+    const tokenExchangeResult = await tokenExchangeResponse.json()
+    console.log("[v0] Token exchange successful, got ID-JAG token")
+
+    // Step 2: Use ID-JAG token to get access token from inventory app
+    const inventoryTokenResponse = await fetch("/api/inventory/oauth2/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        assertion: tokenExchangeResult.access_token,
+      }),
+    })
+
+    if (!inventoryTokenResponse.ok) {
+      const errorText = await inventoryTokenResponse.text()
+      console.error("[v0] Inventory token exchange failed:", errorText)
+      throw new Error(`Inventory token exchange failed: ${errorText}`)
+    }
+
+    const inventoryTokenResult = await inventoryTokenResponse.json()
+    console.log("[v0] Inventory token exchange successful")
+
+    return {
+      id_jag_token: tokenExchangeResult.access_token,
+      inventory_access_token: inventoryTokenResult.access_token,
+    }
+  } catch (error) {
+    console.error("[v0] Server-side token exchange error:", error)
+    throw error
   }
 }
 
