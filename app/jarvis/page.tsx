@@ -245,6 +245,66 @@ export default function JarvisPage() {
   if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 flex items-center justify-center p-4 relative overflow-hidden">
+        {/* Outer rotating ring */}
+        <div
+          className="absolute w-96 h-96 border-2 border-cyan-400/30 rounded-full animate-spin"
+          style={{ animationDuration: "20s" }}
+        >
+          <div className="absolute top-0 left-1/2 w-1 h-8 bg-cyan-400 transform -translate-x-1/2 -translate-y-2"></div>
+          <div className="absolute top-8 right-8 w-1 h-4 bg-cyan-400/60 transform rotate-45"></div>
+          <div className="absolute right-0 top-1/2 w-8 h-1 bg-cyan-400 transform -translate-y-1/2 translate-x-2"></div>
+          <div className="absolute bottom-8 right-8 w-1 h-4 bg-cyan-400/60 transform -rotate-45"></div>
+          <div className="absolute bottom-0 left-1/2 w-1 h-8 bg-cyan-400 transform -translate-x-1/2 translate-y-2"></div>
+          <div className="absolute bottom-8 left-8 w-1 h-4 bg-cyan-400/60 transform rotate-45"></div>
+          <div className="absolute left-0 top-1/2 w-8 h-1 bg-cyan-400 transform -translate-y-1/2 -translate-x-2"></div>
+          <div className="absolute top-8 left-8 w-1 h-4 bg-cyan-400/60 transform -rotate-45"></div>
+        </div>
+
+        {/* Middle rotating ring */}
+        <div
+          className="absolute w-72 h-72 border border-blue-400/40 rounded-full animate-spin"
+          style={{ animationDuration: "15s", animationDirection: "reverse" }}
+        >
+          {Array.from({ length: 24 }).map((_, i) => (
+            <div
+              key={i}
+              className="absolute w-0.5 h-6 bg-blue-400/50"
+              style={{
+                top: "10px",
+                left: "50%",
+                transformOrigin: "50% 134px",
+                transform: `translateX(-50%) rotate(${i * 15}deg)`,
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Inner rotating ring with segments */}
+        <div
+          className="absolute w-48 h-48 border border-yellow-400/30 rounded-full animate-spin"
+          style={{ animationDuration: "10s" }}
+        >
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div
+              key={i}
+              className={`absolute w-1 h-8 ${i % 3 === 0 ? "bg-yellow-400" : "bg-yellow-400/40"}`}
+              style={{
+                top: "8px",
+                left: "50%",
+                transformOrigin: "50% 88px",
+                transform: `translateX(-50%) rotate(${i * 45}deg)`,
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Central core */}
+        <div className="absolute w-24 h-24 border-2 border-cyan-300/50 rounded-full bg-slate-900/80 backdrop-blur-sm flex items-center justify-center">
+          <div className="w-16 h-16 border border-cyan-400/30 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center">
+            <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></div>
+          </div>
+        </div>
+
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.1),transparent_50%)]"></div>
         <div
           className="absolute inset-0 bg-[conic-gradient(from_0deg_at_50%_50%,transparent_0deg,rgba(59,130,246,0.05)_60deg,transparent_120deg)] animate-spin"
@@ -270,6 +330,63 @@ export default function JarvisPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 flex relative overflow-hidden">
+      {/* Large outer ring */}
+      <div
+        className="absolute w-[800px] h-[800px] border border-cyan-400/10 rounded-full animate-spin"
+        style={{ animationDuration: "60s" }}
+      >
+        {Array.from({ length: 32 }).map((_, i) => (
+          <div
+            key={i}
+            className={`absolute w-0.5 h-12 ${i % 4 === 0 ? "bg-cyan-400/30" : "bg-cyan-400/10"}`}
+            style={{
+              top: "0px",
+              left: "50%",
+              transformOrigin: "50% 400px",
+              transform: `translateX(-50%) rotate(${i * 11.25}deg)`,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Medium ring */}
+      <div
+        className="absolute w-[600px] h-[600px] border border-blue-400/15 rounded-full animate-spin"
+        style={{ animationDuration: "40s", animationDirection: "reverse" }}
+      >
+        {Array.from({ length: 24 }).map((_, i) => (
+          <div
+            key={i}
+            className="absolute w-1 h-8 bg-blue-400/20"
+            style={{
+              top: "20px",
+              left: "50%",
+              transformOrigin: "50% 280px",
+              transform: `translateX(-50%) rotate(${i * 15}deg)`,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Inner ring with segments */}
+      <div
+        className="absolute w-[400px] h-[400px] border border-yellow-400/20 rounded-full animate-spin"
+        style={{ animationDuration: "25s" }}
+      >
+        {Array.from({ length: 16 }).map((_, i) => (
+          <div
+            key={i}
+            className={`absolute w-1 h-16 ${i % 3 === 0 ? "bg-yellow-400/40" : "bg-yellow-400/15"}`}
+            style={{
+              top: "10px",
+              left: "50%",
+              transformOrigin: "50% 190px",
+              transform: `translateX(-50%) rotate(${i * 22.5}deg)`,
+            }}
+          />
+        ))}
+      </div>
+
       <div className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.03)_1px,transparent_1px)] bg-[size:50px_50px]"></div>
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(59,130,246,0.1),transparent_50%)]"></div>
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(34,197,94,0.05),transparent_50%)]"></div>
@@ -283,7 +400,7 @@ export default function JarvisPage() {
           <div className="bg-slate-800/90 backdrop-blur-sm border border-blue-500/30 rounded-t-2xl shadow-lg shadow-blue-500/10 p-6 border-b border-blue-500/20">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-full flex items-center justify-center shadow-lg shadow-blue-500/50">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-500/50">
                   <span className="text-xl">🤖</span>
                 </div>
                 <div>

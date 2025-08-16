@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     }
 
     const oktaDomain = tokenPayload.iss.replace("/oauth2/default", "").replace("/oauth2", "")
-    const dynamicTokenEndpoint = `${oktaDomain}/oauth2/v1/token`
+    const dynamicTokenEndpoint = `${oktaDomain}/oauth2/default/v1/token`
 
     console.log("[v0] Extracted Okta domain from ID token:", oktaDomain)
     console.log("[v0] Using dynamic token endpoint:", dynamicTokenEndpoint)
