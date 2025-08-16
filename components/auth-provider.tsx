@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
+import { getAuthServerUrls } from "@/lib/okta-config"
 
 interface User {
   id: string
@@ -117,7 +118,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem("okta_state", state)
     localStorage.setItem("okta_nonce", nonce)
 
-    const authUrl = new URL(`${issuer}/oauth2/default/v1/authorize`)
+    const authServerUrls = getAuthServerUrls(issuer)
+    const authUrl = new URL(authServerUrls.authorize)
     authUrl.searchParams.set("client_id", clientId)
     authUrl.searchParams.set("response_type", "code")
     authUrl.searchParams.set("scope", "openid profile email")
@@ -137,7 +139,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const issuer = process.env.NEXT_PUBLIC_OKTA_ISSUER
     if (issuer) {
-      const logoutUrl = `${issuer}/oauth2/default/v1/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`
+      const authServerUrls = getAuthServerUrls(issuer)
+      const logoutUrl = `${authServerUrls.logout}?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`
       window.location.href = logoutUrl
     }
   }
