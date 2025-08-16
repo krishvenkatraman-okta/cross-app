@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { useAuth } from "@/components/auth-provider"
 
 export default function CallbackPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { setUser } = useAuth()
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -13,86 +15,110 @@ export default function CallbackPage() {
       try {
         const code = searchParams.get("code")
         const state = searchParams.get("state")
-        const errorParam = searchParams.get("error")
+        const error = searchParams.get("error")
 
-        console.log("[v0] Processing OAuth callback...")
+        console.log("[v0] === CALLBACK PROCESSING START ===")
+        console.log("[v0] URL search params:", { code: code?.substring(0, 10) + "...", state, error })
+        console.log("[v0] Current localStorage before callback:", {
+          okta_tokens: localStorage.getItem("okta_tokens"),
+          okta_access_token: localStorage.getItem("okta_access_token"),
+        })
 
-        if (errorParam) {
-          console.error("[v0] OAuth error:", errorParam)
-          setError(`Authentication failed: ${errorParam}`)
+        if (error) {
+          console.error("[v0] OAuth error received:", error)
+          setError(`Authentication failed: ${error}`)
           return
         }
 
         if (!code) {
-          console.error("[v0] No authorization code received")
+          console.error("[v0] No authorization code received from Okta")
           setError("No authorization code received")
           return
         }
 
-        const codeVerifier = localStorage.getItem("pkce_code_verifier")
-        if (!codeVerifier) {
-          console.error("[v0] No PKCE code verifier found")
-          setError("PKCE code verifier missing")
-          return
-        }
-
-        const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
-        const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER || "https://fcxdemo.okta.com/oauth2/v1"
-        const redirectUri = `${window.location.origin}/callback`
-
-        console.log("[v0] Exchanging authorization code for tokens...")
-        console.log("[v0] Using auth server:", authServer)
-        console.log("[v0] Using client ID:", clientId)
-        console.log("[v0] Token endpoint URL:", `${authServer}/token`)
-        console.log("[v0] Redirect URI:", redirectUri)
-        console.log("[v0] Authorization code:", code?.substring(0, 10) + "...")
-        console.log("[v0] Code verifier:", codeVerifier?.substring(0, 10) + "...")
-
-        const tokenResponse = await fetch(`${authServer}/token`, {
+        console.log("[v0] Making callback API request...")
+        const response = await fetch("/api/auth/callback", {
           method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            grant_type: "authorization_code",
-            client_id: clientId!,
-            code: code,
-            redirect_uri: redirectUri,
-            code_verifier: codeVerifier, // Include PKCE code verifier
-          }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ code, state }),
         })
 
-        if (!tokenResponse.ok) {
-          const errorText = await tokenResponse.text()
-          console.error("[v0] Token exchange failed with status:", tokenResponse.status)
-          console.error("[v0] Token exchange error response:", errorText)
-          console.error("[v0] Request URL was:", `${authServer}/token`)
-          console.error("[v0] Request body was:", {
-            grant_type: "authorization_code",
-            client_id: clientId,
-            code: code?.substring(0, 10) + "...",
-            redirect_uri: redirectUri,
-            code_verifier: codeVerifier?.substring(0, 10) + "...",
-          })
-          throw new Error(`Token exchange failed: ${errorText}`)
+        console.log("[v0] Callback API response:", response.status, response.statusText)
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error("[v0] Callback API failed:", errorText)
+          throw new Error("Failed to process authentication")
         }
 
-        const tokens = await tokenResponse.json()
-        console.log("[v0] Token exchange successful")
+        const responseData = await response.json()
+        console.log("[v0] Callback API success:", {
+          hasUser: !!responseData.user,
+          userEmail: responseData.user?.email,
+          hasTokens: !!responseData.tokens,
+          tokenKeys: responseData.tokens ? Object.keys(responseData.tokens) : [],
+        })
 
-        localStorage.setItem("okta_tokens", JSON.stringify(tokens))
-        localStorage.removeItem("pkce_code_verifier")
-        console.log("[v0] Tokens stored in localStorage")
+        const { user, tokens } = responseData
 
-        const redirectPath = state === "jarvis" ? "/jarvis" : "/"
-        console.log("[v0] Redirecting to:", redirectPath)
+        // Set user in auth context
+        console.log("[v0] Setting user in auth context:", user?.email)
+        setUser(user)
+
+        if (tokens) {
+          console.log("[v0] Storing tokens in localStorage...")
+          localStorage.setItem("okta_tokens", JSON.stringify(tokens))
+          localStorage.setItem("okta_access_token", tokens.access_token)
+
+          // Verify storage immediately
+          const storedTokens = localStorage.getItem("okta_tokens")
+          const storedAccessToken = localStorage.getItem("okta_access_token")
+          console.log("[v0] Token storage verification:", {
+            storedTokens: !!storedTokens,
+            storedAccessToken: !!storedAccessToken,
+            tokensLength: storedTokens?.length,
+            accessTokenLength: storedAccessToken?.length,
+          })
+
+          // Parse and verify token content
+          try {
+            const parsedTokens = JSON.parse(storedTokens || "{}")
+            console.log("[v0] Parsed stored tokens:", {
+              hasIdToken: !!parsedTokens.id_token,
+              hasAccessToken: !!parsedTokens.access_token,
+              idTokenLength: parsedTokens.id_token?.length,
+              accessTokenLength: parsedTokens.access_token?.length,
+            })
+          } catch (e) {
+            console.error("[v0] Failed to parse stored tokens:", e)
+          }
+        } else {
+          console.error("[v0] No tokens received from callback API!")
+        }
+
+        let redirectPath = "/"
+        if (state === "jarvis") {
+          redirectPath = "/jarvis"
+        } else if (state === "agent0" || state === "admin") {
+          redirectPath = "/agent0"
+        } else if (state === "inventory") {
+          redirectPath = "/inventory"
+        } else if (state === "todo0" || state === "todo") {
+          redirectPath = "/todo0"
+        }
+
+        console.log("[v0] === CALLBACK PROCESSING END ===")
         router.push(redirectPath)
       } catch (err) {
         console.error("[v0] Callback processing error:", err)
-        setError(err instanceof Error ? err.message : "Authentication failed")
+        setError("Failed to complete authentication")
       }
     }
 
     processCallback()
-  }, [searchParams, router])
+  }, [searchParams, router, setUser])
 
   if (error) {
     return (
