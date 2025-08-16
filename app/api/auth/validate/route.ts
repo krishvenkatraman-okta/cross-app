@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { getAuthServerUrls } from "@/lib/okta-config"
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,14 +10,22 @@ export async function GET(request: NextRequest) {
 
     const token = authHeader.substring(7)
 
-    // Validate token with Okta
-    const userResponse = await fetch(`${process.env.NEXT_PUBLIC_OKTA_ISSUER}/oauth2/default/v1/userinfo`, {
+    const issuer = process.env.NEXT_PUBLIC_OKTA_ISSUER
+    if (!issuer) {
+      return NextResponse.json({ error: "Missing Okta configuration" }, { status: 500 })
+    }
+
+    const authServerUrls = getAuthServerUrls(issuer)
+
+    // Validate token with Okta using the correct authorization server
+    const userResponse = await fetch(`${authServerUrls.userinfo}`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
     })
 
     if (!userResponse.ok) {
+      console.log("[v0] Token validation failed:", userResponse.status, userResponse.statusText)
       return NextResponse.json({ error: "Invalid token" }, { status: 401 })
     }
 
@@ -29,6 +38,7 @@ export async function GET(request: NextRequest) {
       groups: userInfo.groups || [],
     }
 
+    console.log("[v0] Token validation successful for user:", user.email)
     return NextResponse.json(user)
   } catch (error) {
     console.error("Token validation error:", error)
