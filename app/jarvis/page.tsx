@@ -91,31 +91,91 @@ export default function JarvisPage() {
     idToken: string,
   ): Promise<{ id_jag_token: string; inventory_access_token: string } | null> => {
     try {
-      console.log("[v0] Client-side token exchange starting...")
+      console.log("[v0] Client-side token exchange request")
+      console.log("[v0] ID token length:", idToken.length)
+      console.log("[v0] ID token starts with:", idToken.substring(0, 50) + "...")
 
-      const response = await fetch("/api/jarvis/cross-app-access", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({
-          action: "token-exchange",
-        }),
-      })
+      try {
+        const tokenHeader = JSON.parse(atob(idToken.split(".")[0]))
+        const tokenPayload = JSON.parse(atob(idToken.split(".")[1]))
+        console.log("[v0] ID token header:", tokenHeader)
+        console.log("[v0] ID token payload:", {
+          iss: tokenPayload.iss,
+          aud: tokenPayload.aud,
+          sub: tokenPayload.sub,
+          exp: tokenPayload.exp,
+          iat: tokenPayload.iat,
+          expired: tokenPayload.exp < Math.floor(Date.now() / 1000),
+        })
 
-      if (response.ok) {
-        const data = await response.json()
-        console.log("[v0] Client-side token exchange successful")
+        const oktaDomain = tokenPayload.iss
+        console.log("[v0] Extracted Okta domain from ID token:", oktaDomain)
+
+        const tokenEndpoint = `${oktaDomain}/oauth2/v1/token`
+        console.log("[v0] Using dynamic token endpoint:", tokenEndpoint)
+
+        console.log("[v0] Making ID-JAG token exchange request to Okta:", tokenEndpoint)
+        console.log("[v0] Using client ID:", process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID)
+        console.log("[v0] Using audience:", process.env.NEXT_PUBLIC_OKTA_AUDIENCE)
+        console.log("[v0] Making token exchange request to match working curl format")
+
+        const tokenExchangeResponse = await fetch(tokenEndpoint, {
+          method: "POST",
+          credentials: "include", // Include cookies to maintain session context
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({
+            grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+            requested_token_type: "urn:ietf:params:oauth:token-type:id-jag",
+            audience: process.env.NEXT_PUBLIC_OKTA_AUDIENCE || "http://localhost:5001",
+            subject_token: idToken,
+            subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
+            client_id: process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID!,
+            // Note: client_secret cannot be used in browser for security
+          }),
+        })
+
+        if (!tokenExchangeResponse.ok) {
+          const errorText = await tokenExchangeResponse.text()
+          console.error("[v0] ID-JAG exchange failed:", {
+            status: tokenExchangeResponse.status,
+            statusText: tokenExchangeResponse.statusText,
+            body: errorText,
+          })
+          return null
+        }
+
+        const tokenExchangeResult = await tokenExchangeResponse.json()
+        console.log("[v0] ID-JAG token exchange successful")
+
+        const inventoryTokenResponse = await fetch("/api/inventory/oauth2/token", {
+          method: "POST",
+          credentials: "include", // Maintain session context
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({
+            grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+            assertion: tokenExchangeResult.access_token,
+          }),
+        })
+
+        if (!inventoryTokenResponse.ok) {
+          const errorText = await inventoryTokenResponse.text()
+          console.error("[v0] Inventory token exchange failed:", inventoryTokenResponse.status, errorText)
+          return null
+        }
+
+        const inventoryTokenResult = await inventoryTokenResponse.json()
+        console.log("[v0] Inventory token exchange successful")
 
         return {
-          id_jag_token: data.id_jag_token,
-          inventory_access_token: data.inventory_access_token,
+          id_jag_token: tokenExchangeResult.access_token,
+          inventory_access_token: inventoryTokenResult.access_token,
         }
-      } else {
-        const errorText = await response.text()
-        console.error("[v0] Client-side token exchange failed:", response.status, errorText)
+      } catch (decodeError) {
+        console.error("[v0] Failed to decode ID token:", decodeError)
         return null
       }
     } catch (error) {

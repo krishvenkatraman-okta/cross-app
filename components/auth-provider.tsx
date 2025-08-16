@@ -105,17 +105,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Fallback: create user from any available token (for demo purposes)
-      const userData = {
-        id: "authenticated-user",
-        email: "user@authenticated.com",
-        name: "Authenticated User",
-        groups: ["user"],
-      }
-      setUser(userData)
-      console.log("[v0] User set with fallback data")
+      console.log("[v0] No valid ID token found, user remains null")
+      setUser(null)
     } catch (error) {
       console.error("Token processing failed:", error)
+      setUser(null)
     }
   }
 
