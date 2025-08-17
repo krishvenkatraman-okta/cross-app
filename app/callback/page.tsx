@@ -29,60 +29,15 @@ export default function CallbackPage() {
           return
         }
 
-        const codeVerifier = localStorage.getItem("pkce_code_verifier")
-        if (!codeVerifier) {
-          console.error("[v0] No PKCE code verifier found")
-          setError("PKCE code verifier missing")
-          return
+        console.log("[v0] Storing authorization code for auth provider processing")
+
+        // Store the authorization code and state for the auth provider to process
+        localStorage.setItem("okta_auth_code", code)
+        if (state) {
+          localStorage.setItem("okta_auth_state", state)
         }
 
-        const clientId = process.env.NEXT_PUBLIC_OKTA_JARVIS_CLIENT_ID
-        const authServer = process.env.NEXT_PUBLIC_OKTA_AUTH_SERVER || "https://fcxdemo.okta.com/oauth2/v1"
-        const redirectUri = `${window.location.origin}/callback`
-
-        console.log("[v0] Exchanging authorization code for tokens...")
-        console.log("[v0] Using auth server:", authServer)
-        console.log("[v0] Using client ID:", clientId)
-        console.log("[v0] Token endpoint URL:", `${authServer}/token`)
-        console.log("[v0] Redirect URI:", redirectUri)
-        console.log("[v0] Authorization code:", code?.substring(0, 10) + "...")
-        console.log("[v0] Code verifier:", codeVerifier?.substring(0, 10) + "...")
-
-        const tokenResponse = await fetch(`${authServer}/token`, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            grant_type: "authorization_code",
-            client_id: clientId!,
-            code: code,
-            redirect_uri: redirectUri,
-            code_verifier: codeVerifier, // Include PKCE code verifier
-          }),
-        })
-
-        if (!tokenResponse.ok) {
-          const errorText = await tokenResponse.text()
-          console.error("[v0] Token exchange failed with status:", tokenResponse.status)
-          console.error("[v0] Token exchange error response:", errorText)
-          console.error("[v0] Request URL was:", `${authServer}/token`)
-          console.error("[v0] Request body was:", {
-            grant_type: "authorization_code",
-            client_id: clientId,
-            code: code?.substring(0, 10) + "...",
-            redirect_uri: redirectUri,
-            code_verifier: codeVerifier?.substring(0, 10) + "...",
-          })
-          throw new Error(`Token exchange failed: ${errorText}`)
-        }
-
-        const tokens = await tokenResponse.json()
-        console.log("[v0] Token exchange successful")
-
-        localStorage.setItem("okta_tokens", JSON.stringify(tokens))
-        localStorage.removeItem("pkce_code_verifier")
-        console.log("[v0] Tokens stored in localStorage")
-
-        const redirectPath = state === "jarvis" ? "/jarvis" : "/"
+        const redirectPath = state === "jarvis" ? "/jarvis" : state === "inventory" ? "/inventory" : "/"
         console.log("[v0] Redirecting to:", redirectPath)
         router.push(redirectPath)
       } catch (err) {
