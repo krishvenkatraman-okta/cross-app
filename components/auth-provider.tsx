@@ -153,34 +153,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log("[v0] Processing authorization code for authentication")
 
-      // For now, create a mock token structure to simulate successful authentication
-      // This avoids the /token calls that are failing in the current implementation
-      const mockTokens = {
-        id_token: authCode, // Use auth code as temporary token
-        access_token: authCode,
-        token_type: "Bearer",
-        expires_in: 3600,
+      const codeVerifier = localStorage.getItem("pkce_code_verifier")
+      if (!codeVerifier) {
+        throw new Error("PKCE code verifier not found")
       }
 
-      localStorage.setItem("okta_tokens", JSON.stringify(mockTokens))
+      const response = await fetch("/api/auth/callback", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          code: authCode,
+          codeVerifier: codeVerifier,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Token exchange failed: ${response.status}`)
+      }
+
+      const data = await response.json()
+
+      if (data.error) {
+        throw new Error(data.error)
+      }
+
+      // Store real tokens from Okta
+      localStorage.setItem("okta_tokens", JSON.stringify(data.tokens))
       localStorage.removeItem("okta_auth_code")
       localStorage.removeItem("okta_auth_state")
       localStorage.removeItem("pkce_code_verifier")
 
-      // Create user from auth code (simplified for now)
-      const userData = {
-        id: "authenticated-user",
-        email: "user@authenticated.com",
-        name: "Authenticated User",
-        groups: ["user"],
-      }
-
-      setUser(userData)
-      console.log("[v0] Authentication successful without /token calls")
+      // Set real user data from ID token
+      setUser(data.user)
+      console.log("[v0] Authentication successful with real user data:", data.user.email)
     } catch (error) {
       console.error("[v0] Auth code processing failed:", error)
       localStorage.removeItem("okta_auth_code")
       localStorage.removeItem("okta_auth_state")
+      localStorage.removeItem("pkce_code_verifier")
     } finally {
       setIsLoading(false)
     }
