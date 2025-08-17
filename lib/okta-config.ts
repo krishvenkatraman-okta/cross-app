@@ -13,8 +13,10 @@ function getRedirectUri(): string {
   if (typeof window !== "undefined") {
     return `${window.location.origin}/callback`
   }
-  // Server-side fallback - use the deployed URL or localhost
-  return "https://cross-app-indol.vercel.app/callback"
+  // Server-side fallback - use environment variable or deployed URL
+  return process.env.NEXT_PUBLIC_BASE_URL
+    ? `${process.env.NEXT_PUBLIC_BASE_URL}/callback`
+    : "https://cross-app-indol.vercel.app/callback"
 }
 
 export const oktaApps = {
